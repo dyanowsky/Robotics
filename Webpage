@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Robotics Electricity Demand Model</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: auto;
+      padding: 30px;
+      background: #f4f6f8;
+    }
+    h1 {
+      text-align: center;
+    }
+    .slider-container {
+      margin: 20px 0;
+    }
+    label {
+      font-weight: bold;
+    }
+    input[type=range] {
+      width: 100%;
+    }
+    .output-box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    canvas {
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Robotics Electricity Demand Forecast</h1>
+
+<div class="slider-container">
+  <label>Industrial Robots (millions): <span id="industrialValue"></span></label>
+  <input type="range" min="0" max="30" value="15" step="1" id="industrial">
+</div>
+
+<div class="slider-container">
+  <label>Warehouse Robots (millions): <span id="warehouseValue"></span></label>
+  <input type="range" min="0" max="100" value="60" step="1" id="warehouse">
+</div>
+
+<div class="slider-container">
+  <label>Humanoid Robots (millions): <span id="humanoidValue"></span></label>
+  <input type="range" min="0" max="200" value="120" step="5" id="humanoid">
+</div>
+
+<div class="slider-container">
+  <label>Humanoid Hours per Day: <span id="humanoidHoursValue"></span></label>
+  <input type="range" min="1" max="24" value="10" step="1" id="humanoidHours">
+</div>
+
+<div class="slider-container">
+  <label>Consumer Robots (millions): <span id="consumerValue"></span></label>
+  <input type="range" min="0" max="1000" value="800" step="50" id="consumer">
+</div>
+
+<div class="slider-container">
+  <label>AI / Cloud Multiplier: <span id="aiMultiplierValue"></span></label>
+  <input type="range" min="0" max="1.5" value="0.6" step="0.1" id="aiMultiplier">
+</div>
+
+<div class="output-box">
+  <h2>Results</h2>
+  <p><strong>Direct Robotics Demand:</strong> <span id="directTWh"></span> TWh</p>
+  <p><strong>Total Demand (incl. AI):</strong> <span id="totalTWh"></span> TWh</p>
+  <p><strong>% of Global Electricity (30,000 TWh baseline):</strong> <span id="percentGlobal"></span>%</p>
+  <p><strong>Implied Average Load:</strong> <span id="gwLoad"></span> GW</p>
+</div>
+
+<canvas id="chart"></canvas>
+
+<script>
+
+const HOURS_YEAR = 8760;
+const GLOBAL_TWH = 30000;
+
+// Energy assumptions (kWh/year per robot)
+const INDUSTRIAL_KWH = 22000;
+const WAREHOUSE_KWH = 15000;
+const CONSUMER_KWH = 400;
+
+const ctx = document.getElementById('chart');
+let chart = new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: ['Direct TWh', 'AI / Cloud TWh'],
+    datasets: [{
+      label: 'Electricity Demand (TWh)',
+      data: [0, 0]
+    }]
+  },
+  options: {
+    responsive: true
+  }
+});
+
+function updateModel() {
+
+  let industrial = document.getElementById("industrial").value * 1e6;
+  let warehouse = document.getElementById("warehouse").value * 1e6;
+  let humanoid = document.getElementById("humanoid").value * 1e6;
+  let humanoidHours = document.getElementById("humanoidHours").value;
+  let consumer = document.getElementById("consumer").value * 1e6;
+  let aiMultiplier = parseFloat(document.getElementById("aiMultiplier").value);
+
+  // Humanoid energy calculation
+  let humanoidKWh = 1.5 * humanoidHours * 365;
+
+  let directKWh =
+      industrial * INDUSTRIAL_KWH +
+      warehouse * WAREHOUSE_KWH +
+      humanoid * humanoidKWh +
+      consumer * CONSUMER_KWH;
+
+  let directTWh = directKWh / 1e9;
+  let totalTWh = directTWh * (1 + aiMultiplier);
+  let aiTWh = directTWh * aiMultiplier;
+
+  let percentGlobal = (totalTWh / GLOBAL_TWH) * 100;
+  let avgGW = (totalTWh * 1000) / HOURS_YEAR;
+
+  document.getElementById("directTWh").innerText = directTWh.toFixed(0);
+  document.getElementById("totalTWh").innerText = totalTWh.toFixed(0);
+  document.getElementById("percentGlobal").innerText = percentGlobal.toFixed(1);
+  document.getElementById("gwLoad").innerText = avgGW.toFixed(0);
+
+  chart.data.datasets[0].data = [directTWh, aiTWh];
+  chart.update();
+
+  document.getElementById("industrialValue").innerText = industrial / 1e6;
+  document.getElementById("warehouseValue").innerText = warehouse / 1e6;
+  document.getElementById("humanoidValue").innerText = humanoid / 1e6;
+  document.getElementById("humanoidHoursValue").innerText = humanoidHours;
+  document.getElementById("consumerValue").innerText = consumer / 1e6;
+  document.getElementById("aiMultiplierValue").innerText = aiMultiplier;
+}
+
+document.querySelectorAll("input").forEach(el => el.addEventListener("input", updateModel));
+
+updateModel();
+
+</script>
+
+</body>
+</html>
