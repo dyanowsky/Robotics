@@ -114,6 +114,7 @@
           <option value="year">Year (all selected regions combined)</option>
           <option value="region">Region (selected year)</option>
           <option value="year-region">Year × Region</option>
+          <option value="sales">Yearly sales (all selected regions combined)</option>
         </select>
 
         <label for="pivotYear"><strong>Selected year:</strong></label>
@@ -152,37 +153,37 @@
 
     const defaultRegions = {
       China: {
-        baseIndustrialM: 4.0, targetIndustrialM: 25,
-        baseWarehouseM: 7.8, targetWarehouseM: 95,
-        baseHumanoidM: 1.8, targetHumanoidM: 130,
-        baseConsumerM: 85, targetConsumerM: 360,
+        baseIndustrialM: 0.00008, targetIndustrialM: 24.59,
+        baseWarehouseM: 0.00016, targetWarehouseM: 93.44,
+        baseHumanoidM: 0.00004, targetHumanoidM: 127.87,
+        baseConsumerM: 0.00172, targetConsumerM: 354.10,
         usefulLifeYears: 5,
         industrialKWh: 22000, warehouseKWh: 14200, humanoidKWh: 1950, consumerKWh: 420,
         aiMultiplier: 0.62, regionalGridTWh: 9800
       },
       Europe: {
-        baseIndustrialM: 2.2, targetIndustrialM: 9,
-        baseWarehouseM: 5.1, targetWarehouseM: 40,
-        baseHumanoidM: 1.0, targetHumanoidM: 40,
-        baseConsumerM: 67, targetConsumerM: 180,
+        baseIndustrialM: 0.000003, targetIndustrialM: 3.35,
+        baseWarehouseM: 0.000007, targetWarehouseM: 14.87,
+        baseHumanoidM: 0.000001, targetHumanoidM: 14.87,
+        baseConsumerM: 0.000089, targetConsumerM: 66.91,
         usefulLifeYears: 6,
         industrialKWh: 20800, warehouseKWh: 14500, humanoidKWh: 1820, consumerKWh: 400,
         aiMultiplier: 0.56, regionalGridTWh: 4300
       },
       "United States": {
-        baseIndustrialM: 2.5, targetIndustrialM: 13,
-        baseWarehouseM: 6.4, targetWarehouseM: 58,
-        baseHumanoidM: 1.4, targetHumanoidM: 65,
-        baseConsumerM: 77, targetConsumerM: 220,
+        baseIndustrialM: 0.000023, targetIndustrialM: 6.57,
+        baseWarehouseM: 0.000059, targetWarehouseM: 29.33,
+        baseHumanoidM: 0.000013, targetHumanoidM: 32.87,
+        baseConsumerM: 0.000705, targetConsumerM: 111.23,
         usefulLifeYears: 5,
         industrialKWh: 21400, warehouseKWh: 15000, humanoidKWh: 1910, consumerKWh: 410,
         aiMultiplier: 0.64, regionalGridTWh: 4700
       },
       ROW: {
-        baseIndustrialM: 4.5, targetIndustrialM: 30,
-        baseWarehouseM: 8.7, targetWarehouseM: 110,
-        baseHumanoidM: 2.0, targetHumanoidM: 120,
-        baseConsumerM: 136, targetConsumerM: 420,
+        baseIndustrialM: 0.000003, targetIndustrialM: 9.71,
+        baseWarehouseM: 0.000006, targetWarehouseM: 35.59,
+        baseHumanoidM: 0.000001, targetHumanoidM: 38.82,
+        baseConsumerM: 0.000090, targetConsumerM: 135.88,
         usefulLifeYears: 5,
         industrialKWh: 20400, warehouseKWh: 13800, humanoidKWh: 1740, consumerKWh: 390,
         aiMultiplier: 0.54, regionalGridTWh: 11800
@@ -420,8 +421,12 @@
         return;
       }
 
-      if (mode === "year") {
-        YEARS.forEach(year => pivotBody.insertAdjacentHTML("beforeend", rowHtml(String(year), aggregate(year, picks))));
+      if (mode === "year" || mode === "sales") {
+        YEARS.forEach(year => {
+          const totals = aggregate(year, picks);
+          const label = mode === "sales" ? `Year ${year} Sales` : String(year);
+          pivotBody.insertAdjacentHTML("beforeend", rowHtml(label, totals));
+        });
       } else if (mode === "region") {
         const total = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
         picks.forEach(name => {
