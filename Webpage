@@ -1,155 +1,396 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Robotics Electricity Demand Model</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robotics Adoption vs Electricity Demand (2025–2050)</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: auto;
-      padding: 30px;
-      background: #f4f6f8;
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --line: #dce3f0;
+      --text: #1e293b;
+      --accent: #2563eb;
+      --accent-2: #0ea5e9;
+      --good: #0f766e;
     }
-    h1 {
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1, h2, h3 { margin: 0 0 12px; }
+    .muted { color: #475569; margin-bottom: 18px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+    }
+
+    .region-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      margin-bottom: 12px;
+    }
+
+    .region-list label { font-weight: 600; }
+
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #c7d2fe;
+      background: #fff;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .kpi {
+      background: #f8fbff;
+      border: 1px solid #dbeafe;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .kpi .label { font-size: 0.8rem; color: #475569; }
+    .kpi .value { font-size: 1.1rem; font-weight: 700; color: var(--good); }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 420px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-top: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1050px;
+      background: #fff;
+    }
+
+    th, td {
+      border-bottom: 1px solid #e5eaf4;
+      padding: 8px 10px;
+      text-align: right;
+      font-size: 0.88rem;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #eff6ff;
+      color: #1d4ed8;
+      z-index: 2;
       text-align: center;
     }
-    .slider-container {
-      margin: 20px 0;
+
+    td:first-child, th:first-child {
+      position: sticky;
+      left: 0;
+      background: #f8fbff;
+      z-index: 1;
+      text-align: center;
+      font-weight: 700;
     }
-    label {
-      font-weight: bold;
-    }
-    input[type=range] {
-      width: 100%;
-    }
-    .output-box {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 30px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    }
-    canvas {
-      margin-top: 40px;
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .inputs { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <h1>Impact of Robotics Adoption on Electricity Demand</h1>
+    <p class="muted">Study period: <strong>2025–2050</strong>. Filter regions (China, Europe, United States, ROW), adjust scenario inputs, and inspect the pivot-style yearly impact table.</p>
 
-<h1>Robotics Electricity Demand Forecast</h1>
+    <div class="grid">
+      <section class="card">
+        <h2>1) Global Market Filter</h2>
+        <div class="region-list" id="regionFilters"></div>
 
-<div class="slider-container">
-  <label>Industrial Robots (millions): <span id="industrialValue"></span></label>
-  <input type="range" min="0" max="30" value="15" step="1" id="industrial">
-</div>
+        <h3>2) Scenario Inputs (for selected editor region)</h3>
+        <div class="field" style="margin-bottom:10px;max-width:280px;">
+          <label for="editorRegion">Edit Region Parameters</label>
+          <select id="editorRegion"></select>
+        </div>
 
-<div class="slider-container">
-  <label>Warehouse Robots (millions): <span id="warehouseValue"></span></label>
-  <input type="range" min="0" max="100" value="60" step="1" id="warehouse">
-</div>
+        <div class="inputs" id="inputGrid"></div>
 
-<div class="slider-container">
-  <label>Humanoid Robots (millions): <span id="humanoidValue"></span></label>
-  <input type="range" min="0" max="200" value="120" step="5" id="humanoid">
-</div>
+        <div class="kpis">
+          <div class="kpi"><div class="label">2050 Direct (TWh)</div><div class="value" id="kpiDirect">-</div></div>
+          <div class="kpi"><div class="label">2050 AI/Cloud (TWh)</div><div class="value" id="kpiAI">-</div></div>
+          <div class="kpi"><div class="label">2050 Total (TWh)</div><div class="value" id="kpiTotal">-</div></div>
+          <div class="kpi"><div class="label">2050 Share of Selected Grid</div><div class="value" id="kpiShare">-</div></div>
+        </div>
+      </section>
 
-<div class="slider-container">
-  <label>Humanoid Hours per Day: <span id="humanoidHoursValue"></span></label>
-  <input type="range" min="1" max="24" value="10" step="1" id="humanoidHours">
-</div>
+      <section class="card">
+        <h2>3) Electricity Demand Trajectory</h2>
+        <canvas id="trendChart" height="220"></canvas>
+      </section>
+    </div>
 
-<div class="slider-container">
-  <label>Consumer Robots (millions): <span id="consumerValue"></span></label>
-  <input type="range" min="0" max="1000" value="800" step="50" id="consumer">
-</div>
+    <section class="card" style="margin-top:16px;">
+      <h2>4) Pivot Table (Yearly Inputs and Demand Impact)</h2>
+      <p class="muted" style="margin: 0 0 10px;">Values shown for currently selected regions combined. Units: robot stocks in millions; electricity in TWh.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Industrial Robots</th>
+              <th>Warehouse Robots</th>
+              <th>Humanoid Robots</th>
+              <th>Consumer Robots</th>
+              <th>Direct TWh</th>
+              <th>AI/Cloud TWh</th>
+              <th>Total TWh</th>
+              <th>% of Selected Grid</th>
+            </tr>
+          </thead>
+          <tbody id="pivotBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
-<div class="slider-container">
-  <label>AI / Cloud Multiplier: <span id="aiMultiplierValue"></span></label>
-  <input type="range" min="0" max="1.5" value="0.6" step="0.1" id="aiMultiplier">
-</div>
+  <script>
+    const START_YEAR = 2025;
+    const END_YEAR = 2050;
+    const years = Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i);
 
-<div class="output-box">
-  <h2>Results</h2>
-  <p><strong>Direct Robotics Demand:</strong> <span id="directTWh"></span> TWh</p>
-  <p><strong>Total Demand (incl. AI):</strong> <span id="totalTWh"></span> TWh</p>
-  <p><strong>% of Global Electricity (30,000 TWh baseline):</strong> <span id="percentGlobal"></span>%</p>
-  <p><strong>Implied Average Load:</strong> <span id="gwLoad"></span> GW</p>
-</div>
+    const regions = {
+      China: {
+        baseIndustrialM: 3.8, baseWarehouseM: 7.4, baseHumanoidM: 2.2, baseConsumerM: 82,
+        growthIndustrial: 0.08, growthWarehouse: 0.12, growthHumanoid: 0.23, growthConsumer: 0.06,
+        industrialKWh: 22000, warehouseKWh: 14000, humanoidKWh: 1900, consumerKWh: 420,
+        aiMultiplier: 0.62, regionalGridTWh: 9600
+      },
+      Europe: {
+        baseIndustrialM: 2.1, baseWarehouseM: 4.8, baseHumanoidM: 1.2, baseConsumerM: 65,
+        growthIndustrial: 0.06, growthWarehouse: 0.1, growthHumanoid: 0.2, growthConsumer: 0.05,
+        industrialKWh: 21000, warehouseKWh: 14500, humanoidKWh: 1850, consumerKWh: 400,
+        aiMultiplier: 0.58, regionalGridTWh: 4200
+      },
+      "United States": {
+        baseIndustrialM: 2.4, baseWarehouseM: 6.1, baseHumanoidM: 1.6, baseConsumerM: 74,
+        growthIndustrial: 0.07, growthWarehouse: 0.11, growthHumanoid: 0.22, growthConsumer: 0.05,
+        industrialKWh: 21500, warehouseKWh: 15000, humanoidKWh: 1950, consumerKWh: 410,
+        aiMultiplier: 0.64, regionalGridTWh: 4600
+      },
+      ROW: {
+        baseIndustrialM: 4.3, baseWarehouseM: 8.3, baseHumanoidM: 2.1, baseConsumerM: 132,
+        growthIndustrial: 0.075, growthWarehouse: 0.105, growthHumanoid: 0.21, growthConsumer: 0.055,
+        industrialKWh: 20500, warehouseKWh: 13800, humanoidKWh: 1750, consumerKWh: 390,
+        aiMultiplier: 0.55, regionalGridTWh: 11600
+      }
+    };
 
-<canvas id="chart"></canvas>
+    const regionNames = Object.keys(regions);
+    const regionFilters = document.getElementById("regionFilters");
+    const editorRegion = document.getElementById("editorRegion");
+    const inputGrid = document.getElementById("inputGrid");
+    const pivotBody = document.getElementById("pivotBody");
 
-<script>
+    const inputSchema = [
+      ["baseIndustrialM", "Industrial Robots in 2025 (millions)", 0.1],
+      ["baseWarehouseM", "Warehouse Robots in 2025 (millions)", 0.1],
+      ["baseHumanoidM", "Humanoid Robots in 2025 (millions)", 0.1],
+      ["baseConsumerM", "Consumer Robots in 2025 (millions)", 1],
+      ["growthIndustrial", "Industrial CAGR", 0.005],
+      ["growthWarehouse", "Warehouse CAGR", 0.005],
+      ["growthHumanoid", "Humanoid CAGR", 0.005],
+      ["growthConsumer", "Consumer CAGR", 0.005],
+      ["industrialKWh", "Industrial kWh per robot-year", 100],
+      ["warehouseKWh", "Warehouse kWh per robot-year", 100],
+      ["humanoidKWh", "Humanoid kWh per robot-year", 50],
+      ["consumerKWh", "Consumer kWh per robot-year", 10],
+      ["aiMultiplier", "AI/Cloud multiplier", 0.01],
+      ["regionalGridTWh", "Regional baseline electricity (TWh)", 100]
+    ];
 
-const HOURS_YEAR = 8760;
-const GLOBAL_TWH = 30000;
+    function makeRegionControls() {
+      regionNames.forEach((name, idx) => {
+        const id = `region_${idx}`;
+        regionFilters.insertAdjacentHTML("beforeend", `
+          <label><input type="checkbox" id="${id}" data-region="${name}" checked> ${name}</label>
+        `);
+        editorRegion.insertAdjacentHTML("beforeend", `<option value="${name}">${name}</option>`);
+      });
+      regionFilters.querySelectorAll("input").forEach(el => el.addEventListener("change", updateAll));
+      editorRegion.addEventListener("change", renderInputFields);
+    }
 
-// Energy assumptions (kWh/year per robot)
-const INDUSTRIAL_KWH = 22000;
-const WAREHOUSE_KWH = 15000;
-const CONSUMER_KWH = 400;
+    function renderInputFields() {
+      const region = regions[editorRegion.value];
+      inputGrid.innerHTML = "";
+      inputSchema.forEach(([key, label, step]) => {
+        const isRate = key.startsWith("growth") || key === "aiMultiplier";
+        const val = isRate ? Number(region[key]).toFixed(3) : region[key];
+        inputGrid.insertAdjacentHTML("beforeend", `
+          <div class="field">
+            <label for="${key}">${label}</label>
+            <input id="${key}" type="number" step="${step}" value="${val}" />
+          </div>
+        `);
+      });
 
-const ctx = document.getElementById('chart');
-let chart = new Chart(ctx, {
-  type: 'bar',
-  data: {
-    labels: ['Direct TWh', 'AI / Cloud TWh'],
-    datasets: [{
-      label: 'Electricity Demand (TWh)',
-      data: [0, 0]
-    }]
-  },
-  options: {
-    responsive: true
-  }
-});
+      inputGrid.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", () => {
+          const key = input.id;
+          regions[editorRegion.value][key] = parseFloat(input.value) || 0;
+          updateAll();
+        });
+      });
+    }
 
-function updateModel() {
+    function selectedRegions() {
+      return Array.from(regionFilters.querySelectorAll("input:checked")).map(i => i.dataset.region);
+    }
 
-  let industrial = document.getElementById("industrial").value * 1e6;
-  let warehouse = document.getElementById("warehouse").value * 1e6;
-  let humanoid = document.getElementById("humanoid").value * 1e6;
-  let humanoidHours = document.getElementById("humanoidHours").value;
-  let consumer = document.getElementById("consumer").value * 1e6;
-  let aiMultiplier = parseFloat(document.getElementById("aiMultiplier").value);
+    function projectRegion(regionParams, year) {
+      const t = year - START_YEAR;
+      const industrialM = regionParams.baseIndustrialM * (1 + regionParams.growthIndustrial) ** t;
+      const warehouseM = regionParams.baseWarehouseM * (1 + regionParams.growthWarehouse) ** t;
+      const humanoidM = regionParams.baseHumanoidM * (1 + regionParams.growthHumanoid) ** t;
+      const consumerM = regionParams.baseConsumerM * (1 + regionParams.growthConsumer) ** t;
 
-  // Humanoid energy calculation
-  let humanoidKWh = 1.5 * humanoidHours * 365;
+      const directKWh =
+        industrialM * 1e6 * regionParams.industrialKWh +
+        warehouseM * 1e6 * regionParams.warehouseKWh +
+        humanoidM * 1e6 * regionParams.humanoidKWh +
+        consumerM * 1e6 * regionParams.consumerKWh;
 
-  let directKWh =
-      industrial * INDUSTRIAL_KWH +
-      warehouse * WAREHOUSE_KWH +
-      humanoid * humanoidKWh +
-      consumer * CONSUMER_KWH;
+      const directTWh = directKWh / 1e9;
+      const aiTWh = directTWh * regionParams.aiMultiplier;
+      const totalTWh = directTWh + aiTWh;
 
-  let directTWh = directKWh / 1e9;
-  let totalTWh = directTWh * (1 + aiMultiplier);
-  let aiTWh = directTWh * aiMultiplier;
+      return { industrialM, warehouseM, humanoidM, consumerM, directTWh, aiTWh, totalTWh };
+    }
 
-  let percentGlobal = (totalTWh / GLOBAL_TWH) * 100;
-  let avgGW = (totalTWh * 1000) / HOURS_YEAR;
+    function aggregateForYear(year, pickedRegions) {
+      const agg = {
+        industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0,
+        directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0
+      };
+      pickedRegions.forEach(name => {
+        const r = regions[name];
+        const p = projectRegion(r, year);
+        agg.industrialM += p.industrialM;
+        agg.warehouseM += p.warehouseM;
+        agg.humanoidM += p.humanoidM;
+        agg.consumerM += p.consumerM;
+        agg.directTWh += p.directTWh;
+        agg.aiTWh += p.aiTWh;
+        agg.totalTWh += p.totalTWh;
+        agg.gridTWh += r.regionalGridTWh;
+      });
+      agg.sharePct = agg.gridTWh > 0 ? (agg.totalTWh / agg.gridTWh) * 100 : 0;
+      return agg;
+    }
 
-  document.getElementById("directTWh").innerText = directTWh.toFixed(0);
-  document.getElementById("totalTWh").innerText = totalTWh.toFixed(0);
-  document.getElementById("percentGlobal").innerText = percentGlobal.toFixed(1);
-  document.getElementById("gwLoad").innerText = avgGW.toFixed(0);
+    const ctx = document.getElementById("trendChart");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: years,
+        datasets: [
+          { label: "Direct TWh", borderColor: "#2563eb", backgroundColor: "#2563eb22", data: [], tension: 0.2 },
+          { label: "AI/Cloud TWh", borderColor: "#0ea5e9", backgroundColor: "#0ea5e922", data: [], tension: 0.2 },
+          { label: "Total TWh", borderColor: "#0f766e", backgroundColor: "#0f766e22", data: [], tension: 0.2 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "bottom" } },
+        scales: {
+          y: { title: { display: true, text: "TWh" } },
+          x: { title: { display: true, text: "Year" } }
+        }
+      }
+    });
 
-  chart.data.datasets[0].data = [directTWh, aiTWh];
-  chart.update();
+    function updateAll() {
+      const picked = selectedRegions();
+      const yearly = years.map(y => aggregateForYear(y, picked));
 
-  document.getElementById("industrialValue").innerText = industrial / 1e6;
-  document.getElementById("warehouseValue").innerText = warehouse / 1e6;
-  document.getElementById("humanoidValue").innerText = humanoid / 1e6;
-  document.getElementById("humanoidHoursValue").innerText = humanoidHours;
-  document.getElementById("consumerValue").innerText = consumer / 1e6;
-  document.getElementById("aiMultiplierValue").innerText = aiMultiplier;
-}
+      chart.data.datasets[0].data = yearly.map(y => y.directTWh.toFixed(1));
+      chart.data.datasets[1].data = yearly.map(y => y.aiTWh.toFixed(1));
+      chart.data.datasets[2].data = yearly.map(y => y.totalTWh.toFixed(1));
+      chart.update();
 
-document.querySelectorAll("input").forEach(el => el.addEventListener("input", updateModel));
+      pivotBody.innerHTML = "";
+      years.forEach((year, idx) => {
+        const row = yearly[idx];
+        pivotBody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td>${year}</td>
+            <td>${row.industrialM.toFixed(2)}</td>
+            <td>${row.warehouseM.toFixed(2)}</td>
+            <td>${row.humanoidM.toFixed(2)}</td>
+            <td>${row.consumerM.toFixed(2)}</td>
+            <td>${row.directTWh.toFixed(1)}</td>
+            <td>${row.aiTWh.toFixed(1)}</td>
+            <td>${row.totalTWh.toFixed(1)}</td>
+            <td>${row.sharePct.toFixed(2)}%</td>
+          </tr>
+        `);
+      });
 
-updateModel();
+      const y2050 = yearly[yearly.length - 1] || { directTWh: 0, aiTWh: 0, totalTWh: 0, sharePct: 0 };
+      document.getElementById("kpiDirect").textContent = y2050.directTWh.toFixed(1);
+      document.getElementById("kpiAI").textContent = y2050.aiTWh.toFixed(1);
+      document.getElementById("kpiTotal").textContent = y2050.totalTWh.toFixed(1);
+      document.getElementById("kpiShare").textContent = y2050.sharePct.toFixed(2) + "%";
+    }
 
-</script>
-
+    makeRegionControls();
+    renderInputFields();
+    updateAll();
+  </script>
 </body>
 </html>
