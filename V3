@@ -52,6 +52,11 @@
     td.left, th.left { text-align: left; position: sticky; left: 0; z-index: 2; background: #f9fbff; }
     tr.total-row td { background: #f2f7ff; font-weight: 700; }
     .small { color: var(--muted); font-size: 0.85rem; margin: 8px 0 10px; }
+    .summary { margin-top: 12px; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; background: #f8fbff; }
+    .summary p { margin: 0 0 8px; color: #1f2937; }
+    .summary ul { margin: 0; padding-left: 18px; color: #334155; }
+    .cite-list { margin: 0; padding-left: 20px; }
+    .cite-list li { margin-bottom: 7px; }
 
     @media (max-width: 1020px) {
       .layout { grid-template-columns: 1fr; }
@@ -78,6 +83,12 @@
         <div class="toolbar">
           <label for="editorRegion"><strong>Edit region:</strong></label>
           <select id="editorRegion"></select>
+          <label for="adoptionPath"><strong>Adoption path:</strong></label>
+          <select id="adoptionPath">
+            <option value="exponential">Exponential (constant CAGR)</option>
+            <option value="linear">Linear</option>
+            <option value="logistic">Logistic S-curve</option>
+          </select>
         </div>
 
         <div id="inputGrid" class="input-grid"></div>
@@ -103,6 +114,7 @@
       <section class="card">
         <h2>Demand Trajectory (Selected Regions)</h2>
         <canvas id="trendChart" height="220"></canvas>
+        <div class="summary" id="modelSummary"></div>
       </section>
     </div>
 
@@ -142,6 +154,20 @@
           <tbody id="pivotBody"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card" style="margin-top:14px;">
+      <h2>Works Cited (for model assumptions)</h2>
+      <p class="small">Per your direction, this excludes citations for 2025/2050 stock inputs from the investment report.</p>
+      <ul class="cite-list">
+        <li><strong>Useful life assumption:</strong> U.S. Internal Revenue Service, Publication 946 (asset depreciation framework used as a useful-life anchor). <a href="https://www.irs.gov/publications/p946" target="_blank" rel="noopener noreferrer">irs.gov/publications/p946</a></li>
+        <li><strong>Industrial robot energy anchor:</strong> ABB IRB 6700 product page/spec resources (industrial robot electrical specification reference point). <a href="https://new.abb.com/products/robotics/industrial-robots/irb-6700" target="_blank" rel="noopener noreferrer">abb.com IRB 6700</a></li>
+        <li><strong>Warehouse robot energy anchor:</strong> Geek+ P800 AMR specification (battery capacity / charging profile reference for warehouse robotics). <a href="https://www.geekplus.com/en/picking/p800" target="_blank" rel="noopener noreferrer">geekplus.com P800</a></li>
+        <li><strong>Humanoid robot energy anchor:</strong> Unitree H1 specification page (battery and runtime reference for humanoid robots). <a href="https://www.unitree.com/h1" target="_blank" rel="noopener noreferrer">unitree.com/h1</a></li>
+        <li><strong>Consumer robot energy anchor:</strong> iRobot Roomba product specs/manuals (battery and runtime reference for consumer robots). <a href="https://www.irobot.com/en_US/roomba-combo-j9plus-robot-vacuum-and-mop/c975020.html" target="_blank" rel="noopener noreferrer">irobot.com Roomba Combo j9+</a></li>
+        <li><strong>Regional baseline electricity:</strong> Ember Global Electricity Review (regional electricity generation/consumption context). <a href="https://ember-climate.org/insights/research/global-electricity-review-2024/" target="_blank" rel="noopener noreferrer">ember-climate.org GER 2024</a></li>
+        <li><strong>AI / cloud multiplier context:</strong> IEA report on electricity use from data centres, AI and crypto. <a href="https://www.iea.org/reports/electricity-2024/data-centres-and-data-transmission-networks" target="_blank" rel="noopener noreferrer">iea.org Electricity 2024</a></li>
+      </ul>
     </section>
   </div>
 
@@ -218,6 +244,8 @@
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
     const status = document.getElementById("selectionStatus");
+    const adoptionPath = document.getElementById("adoptionPath");
+    const modelSummary = document.getElementById("modelSummary");
 
     const cagrOutputMap = {
       industrial: document.getElementById("outIndustrialCagr"),
@@ -236,29 +264,54 @@
       return Array.from(regionFilters.querySelectorAll("input:checked")).map(x => x.dataset.region);
     }
 
+    function sigmoid(x) {
+      return 1 / (1 + Math.exp(-x));
+    }
+
+    function stockAt(base, target, t, pathType) {
+      const x = t / N_PERIODS;
+      if (pathType === "linear") {
+        return base + (target - base) * x;
+      }
+
+      if (pathType === "logistic") {
+        const steepness = 8;
+        const lo = sigmoid(-steepness / 2);
+        const hi = sigmoid(steepness / 2);
+        const normalized = (sigmoid(steepness * (x - 0.5)) - lo) / (hi - lo);
+        return base + (target - base) * normalized;
+      }
+
+      if (base <= 0 || target <= 0) {
+        return base + (target - base) * x;
+      }
+      return base * (target / base) ** x;
+    }
+
     function project(params, year) {
       const t = year - START_YEAR;
+      const pathType = adoptionPath.value;
       const gInd = cagr(params.baseIndustrialM, params.targetIndustrialM);
       const gWh = cagr(params.baseWarehouseM, params.targetWarehouseM);
       const gHum = cagr(params.baseHumanoidM, params.targetHumanoidM);
       const gCon = cagr(params.baseConsumerM, params.targetConsumerM);
 
-      const industrialM = params.baseIndustrialM * (1 + gInd) ** t;
-      const warehouseM = params.baseWarehouseM * (1 + gWh) ** t;
-      const humanoidM = params.baseHumanoidM * (1 + gHum) ** t;
-      const consumerM = params.baseConsumerM * (1 + gCon) ** t;
+      const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
+      const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
+      const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
+      const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
 
-      const prevIndustrialM = t === 0 ? industrialM : params.baseIndustrialM * (1 + gInd) ** (t - 1);
-      const prevWarehouseM = t === 0 ? warehouseM : params.baseWarehouseM * (1 + gWh) ** (t - 1);
-      const prevHumanoidM = t === 0 ? humanoidM : params.baseHumanoidM * (1 + gHum) ** (t - 1);
-      const prevConsumerM = t === 0 ? consumerM : params.baseConsumerM * (1 + gCon) ** (t - 1);
+      const prevIndustrialM = t === 0 ? industrialM : stockAt(params.baseIndustrialM, params.targetIndustrialM, t - 1, pathType);
+      const prevWarehouseM = t === 0 ? warehouseM : stockAt(params.baseWarehouseM, params.targetWarehouseM, t - 1, pathType);
+      const prevHumanoidM = t === 0 ? humanoidM : stockAt(params.baseHumanoidM, params.targetHumanoidM, t - 1, pathType);
+      const prevConsumerM = t === 0 ? consumerM : stockAt(params.baseConsumerM, params.targetConsumerM, t - 1, pathType);
 
       const life = Math.max(1, Math.round(params.usefulLifeYears || 1));
       const retireT = t - life;
-      const retiredIndustrialM = retireT >= 0 ? params.baseIndustrialM * (1 + gInd) ** retireT : 0;
-      const retiredWarehouseM = retireT >= 0 ? params.baseWarehouseM * (1 + gWh) ** retireT : 0;
-      const retiredHumanoidM = retireT >= 0 ? params.baseHumanoidM * (1 + gHum) ** retireT : 0;
-      const retiredConsumerM = retireT >= 0 ? params.baseConsumerM * (1 + gCon) ** retireT : 0;
+      const retiredIndustrialM = retireT >= 0 ? stockAt(params.baseIndustrialM, params.targetIndustrialM, retireT, pathType) : 0;
+      const retiredWarehouseM = retireT >= 0 ? stockAt(params.baseWarehouseM, params.targetWarehouseM, retireT, pathType) : 0;
+      const retiredHumanoidM = retireT >= 0 ? stockAt(params.baseHumanoidM, params.targetHumanoidM, retireT, pathType) : 0;
+      const retiredConsumerM = retireT >= 0 ? stockAt(params.baseConsumerM, params.targetConsumerM, retireT, pathType) : 0;
 
       const deployIndustrialM = Math.max(0, industrialM - prevIndustrialM + retiredIndustrialM);
       const deployWarehouseM = Math.max(0, warehouseM - prevWarehouseM + retiredWarehouseM);
@@ -285,6 +338,38 @@
         gridTWh: params.regionalGridTWh,
         gInd, gWh, gHum, gCon
       };
+    }
+
+    function updateModelSummary() {
+      const mode = adoptionPath.value;
+      const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li>`;
+
+      const byMode = {
+        exponential: {
+          title: "Exponential path (constant CAGR)",
+          body: "Stocks compound each year at a constant percentage rate that exactly links 2025 to 2050 levels.",
+          eq: "stock<sub>t</sub> = base × (target / base)<sup>t / N</sup>"
+        },
+        linear: {
+          title: "Linear path",
+          body: "Stocks add the same absolute amount each year, creating a straight-line adoption ramp from 2025 to 2050.",
+          eq: "stock<sub>t</sub> = base + (target - base) × (t / N)"
+        },
+        logistic: {
+          title: "Logistic S-curve path",
+          body: "Adoption starts slower, accelerates in the middle years, then tapers as it approaches 2050 targets.",
+          eq: "stock<sub>t</sub> = base + (target - base) × normalized(1 / (1 + e<sup>-k(x-0.5)</sup>), x=t/N)"
+        }
+      };
+
+      const content = byMode[mode];
+      modelSummary.innerHTML = `
+        <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
+        <ul>
+          <li><strong>Adoption equation:</strong> ${content.eq}</li>
+          ${common}
+        </ul>
+      `;
     }
 
     function aggregate(year, picks) {
@@ -347,6 +432,11 @@
 
       pivotMode.addEventListener("change", updateAll);
       pivotYear.addEventListener("input", updateAll);
+      adoptionPath.addEventListener("change", () => {
+        updateGrowthOutputs();
+        updateModelSummary();
+        updateAll();
+      });
     }
 
     function renderInputs() {
@@ -488,6 +578,7 @@
     buildControls();
     renderInputs();
     updateGrowthOutputs();
+    updateModelSummary();
     updateAll();
   </script>
 </body>
