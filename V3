@@ -111,7 +111,12 @@
 
       <section class="card">
         <h2>Demand Trajectory (Selected Regions)</h2>
+        <div class="toolbar">
+          <label for="salesViewToggle"><strong>Chart mode:</strong></label>
+          <label><input id="salesViewToggle" type="checkbox" /> Show annual robot sales curves</label>
+        </div>
         <canvas id="trendChart" height="220"></canvas>
+        <h2 style="margin-top:12px;">Calculation Summary</h2>
         <div class="summary" id="modelSummary"></div>
       </section>
     </div>
@@ -235,6 +240,15 @@
       ["regionalGridTWh", "Regional baseline electricity (TWh)", 100]
     ];
 
+    const stockInputKeys = new Set([
+      "baseIndustrialM", "targetIndustrialM",
+      "baseWarehouseM", "targetWarehouseM",
+      "baseHumanoidM", "targetHumanoidM",
+      "baseConsumerM", "targetConsumerM"
+    ]);
+    const coreSchema = schema.filter(([key]) => !stockInputKeys.has(key));
+    const stockSchema = schema.filter(([key]) => stockInputKeys.has(key));
+
     const regionNames = Object.keys(regions);
     const regionFilters = document.getElementById("regionFilters");
     const editorRegion = document.getElementById("editorRegion");
@@ -338,6 +352,7 @@
 
       return {
         industrialM, warehouseM, humanoidM, consumerM,
+        deployIndustrialM, deployWarehouseM, deployHumanoidM, deployConsumerM,
         retirementM, deploymentM,
         directTWh, aiTWh, totalTWh,
         gridTWh: params.regionalGridTWh,
@@ -358,13 +373,17 @@
     }
 
     function aggregate(year, picks) {
-      const a = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
+      const a = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, deployIndustrialM: 0, deployWarehouseM: 0, deployHumanoidM: 0, deployConsumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
       picks.forEach(name => {
         const p = project(regions[name], year);
         a.industrialM += p.industrialM;
+        a.deployIndustrialM += p.deployIndustrialM;
         a.warehouseM += p.warehouseM;
+        a.deployWarehouseM += p.deployWarehouseM;
         a.humanoidM += p.humanoidM;
+        a.deployHumanoidM += p.deployHumanoidM;
         a.consumerM += p.consumerM;
+        a.deployConsumerM += p.deployConsumerM;
         a.retirementM += p.retirementM;
         a.deploymentM += p.deploymentM;
         a.directTWh += p.directTWh;
@@ -426,17 +445,22 @@
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
-      schema.forEach(([key, label, step]) => {
+      stockInputGrid.innerHTML = "";
+
+      function renderField([key, label, step], container) {
         const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
-        inputGrid.insertAdjacentHTML("beforeend", `
+        container.insertAdjacentHTML("beforeend", `
           <div class="field">
             <label for="${key}">${label}</label>
             <input type="number" id="${key}" step="${step}" value="${value}" ${key === "usefulLifeYears" ? "min=\"3\"" : key === "breakthroughYear" ? `min=\"${START_YEAR}\" max=\"${END_YEAR}\"` : "min=\"0\""} />
           </div>
         `);
-      });
+      }
 
-      inputGrid.querySelectorAll("input").forEach(input => {
+      coreSchema.forEach(item => renderField(item, inputGrid));
+      stockSchema.forEach(item => renderField(item, stockInputGrid));
+
+      document.querySelectorAll("#inputGrid input, #stockInputGrid input").forEach(input => {
         input.addEventListener("input", () => {
           const key = input.id;
           let v = Number(input.value);
@@ -546,9 +570,23 @@
       }
 
       const series = YEARS.map(y => aggregate(y, picks));
-      chart.data.datasets[0].data = series.map(s => Number(s.directTWh.toFixed(1)));
-      chart.data.datasets[1].data = series.map(s => Number(s.aiTWh.toFixed(1)));
-      chart.data.datasets[2].data = series.map(s => Number(s.totalTWh.toFixed(1)));
+      if (salesViewToggle.checked) {
+        chart.options.scales.y.title.text = "Million robots / year";
+        chart.data.datasets = [
+          { label: "Industrial Sales", data: series.map(s => Number(s.deployIndustrialM.toFixed(2))), borderColor: "#1d4ed8", backgroundColor: "#1d4ed820", tension: 0.2 },
+          { label: "Warehouse Sales", data: series.map(s => Number(s.deployWarehouseM.toFixed(2))), borderColor: "#7c3aed", backgroundColor: "#7c3aed20", tension: 0.2 },
+          { label: "Humanoid Sales", data: series.map(s => Number(s.deployHumanoidM.toFixed(2))), borderColor: "#ea580c", backgroundColor: "#ea580c20", tension: 0.2 },
+          { label: "Consumer Sales", data: series.map(s => Number(s.deployConsumerM.toFixed(2))), borderColor: "#0891b2", backgroundColor: "#0891b220", tension: 0.2 },
+          { label: "Total Sales", data: series.map(s => Number(s.deploymentM.toFixed(2))), borderColor: "#0f766e", backgroundColor: "#0f766e20", tension: 0.2 }
+        ];
+      } else {
+        chart.options.scales.y.title.text = "TWh";
+        chart.data.datasets = [
+          { label: "Direct TWh", data: series.map(s => Number(s.directTWh.toFixed(1))), borderColor: "#1d4ed8", backgroundColor: "#1d4ed820", tension: 0.2 },
+          { label: "AI/Cloud TWh", data: series.map(s => Number(s.aiTWh.toFixed(1))), borderColor: "#0ea5e9", backgroundColor: "#0ea5e920", tension: 0.2 },
+          { label: "Total TWh", data: series.map(s => Number(s.totalTWh.toFixed(1))), borderColor: "#0f766e", backgroundColor: "#0f766e20", tension: 0.2 }
+        ];
+      }
       chart.update();
 
       const y2050 = series[series.length - 1];
