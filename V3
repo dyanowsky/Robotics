@@ -68,7 +68,7 @@
 <body>
   <div class="container">
     <h1>Robotics Adoption → Electricity Demand (2025–2050)</h1>
-    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Add useful life to include robot retirements and replacement deployments.</p>
+    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Set a breakthrough year to shift the S-curve and accelerate adoption after the breakthrough.</p>
 
     <div class="layout">
       <section class="card">
@@ -83,15 +83,13 @@
         <div class="toolbar">
           <label for="editorRegion"><strong>Edit region:</strong></label>
           <select id="editorRegion"></select>
-          <label for="adoptionPath"><strong>Adoption path:</strong></label>
-          <select id="adoptionPath">
-            <option value="exponential">Exponential (constant CAGR)</option>
-            <option value="linear">Linear</option>
-            <option value="logistic">Logistic S-curve</option>
-          </select>
         </div>
 
         <div id="inputGrid" class="input-grid"></div>
+        <div class="toolbar" style="margin-top:8px;">
+          <button id="toggleStockInputsBtn" type="button">Show starting/ending stock inputs</button>
+        </div>
+        <div id="stockInputGrid" class="input-grid" style="display:none;"></div>
 
         <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
         <div class="output-grid">
@@ -113,7 +111,12 @@
 
       <section class="card">
         <h2>Demand Trajectory (Selected Regions)</h2>
+        <div class="toolbar">
+          <label for="salesViewToggle"><strong>Chart mode:</strong></label>
+          <label><input id="salesViewToggle" type="checkbox" /> Show annual robot sales curves</label>
+        </div>
         <canvas id="trendChart" height="220"></canvas>
+        <h2 style="margin-top:12px;">Calculation Summary</h2>
         <div class="summary" id="modelSummary"></div>
       </section>
     </div>
@@ -185,7 +188,7 @@
         baseConsumerM: 0.00172, targetConsumerM: 354.10,
         usefulLifeYears: 5,
         industrialKWh: 22000, warehouseKWh: 14200, humanoidKWh: 1950, consumerKWh: 420,
-        aiMultiplier: 0.62, regionalGridTWh: 9800
+        aiMultiplier: 0.62, regionalGridTWh: 9800, breakthroughYear: 2035
       },
       Europe: {
         baseIndustrialM: 0.000003, targetIndustrialM: 3.35,
@@ -194,7 +197,7 @@
         baseConsumerM: 0.000089, targetConsumerM: 66.91,
         usefulLifeYears: 6,
         industrialKWh: 20800, warehouseKWh: 14500, humanoidKWh: 1820, consumerKWh: 400,
-        aiMultiplier: 0.56, regionalGridTWh: 4300
+        aiMultiplier: 0.56, regionalGridTWh: 4300, breakthroughYear: 2035
       },
       "United States": {
         baseIndustrialM: 0.000023, targetIndustrialM: 6.57,
@@ -203,7 +206,7 @@
         baseConsumerM: 0.000705, targetConsumerM: 111.23,
         usefulLifeYears: 5,
         industrialKWh: 21400, warehouseKWh: 15000, humanoidKWh: 1910, consumerKWh: 410,
-        aiMultiplier: 0.64, regionalGridTWh: 4700
+        aiMultiplier: 0.64, regionalGridTWh: 4700, breakthroughYear: 2035
       },
       ROW: {
         baseIndustrialM: 0.000003, targetIndustrialM: 9.71,
@@ -212,7 +215,7 @@
         baseConsumerM: 0.000090, targetConsumerM: 135.88,
         usefulLifeYears: 5,
         industrialKWh: 20400, warehouseKWh: 13800, humanoidKWh: 1740, consumerKWh: 390,
-        aiMultiplier: 0.54, regionalGridTWh: 11800
+        aiMultiplier: 0.54, regionalGridTWh: 11800, breakthroughYear: 2035
       }
     };
 
@@ -227,6 +230,7 @@
       ["targetHumanoidM", "Humanoid robots in 2050 (M)", 0.1],
       ["baseConsumerM", "Consumer robots in 2025 (M)", 1],
       ["targetConsumerM", "Consumer robots in 2050 (M)", 1],
+      ["breakthroughYear", "Breakthrough year (S-curve acceleration trigger)", 1],
       ["usefulLifeYears", "Useful life (years, e.g., 3-6)", 1],
       ["industrialKWh", "Industrial kWh per robot-year", 100],
       ["warehouseKWh", "Warehouse kWh per robot-year", 100],
@@ -236,15 +240,26 @@
       ["regionalGridTWh", "Regional baseline electricity (TWh)", 100]
     ];
 
+    const stockInputKeys = new Set([
+      "baseIndustrialM", "targetIndustrialM",
+      "baseWarehouseM", "targetWarehouseM",
+      "baseHumanoidM", "targetHumanoidM",
+      "baseConsumerM", "targetConsumerM"
+    ]);
+    const coreSchema = schema.filter(([key]) => !stockInputKeys.has(key));
+    const stockSchema = schema.filter(([key]) => stockInputKeys.has(key));
+
     const regionNames = Object.keys(regions);
     const regionFilters = document.getElementById("regionFilters");
     const editorRegion = document.getElementById("editorRegion");
     const inputGrid = document.getElementById("inputGrid");
+    const stockInputGrid = document.getElementById("stockInputGrid");
+    const toggleStockInputsBtn = document.getElementById("toggleStockInputsBtn");
+    const salesViewToggle = document.getElementById("salesViewToggle");
     const pivotBody = document.getElementById("pivotBody");
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
     const status = document.getElementById("selectionStatus");
-    const adoptionPath = document.getElementById("adoptionPath");
     const modelSummary = document.getElementById("modelSummary");
 
     const cagrOutputMap = {
@@ -268,50 +283,55 @@
       return 1 / (1 + Math.exp(-x));
     }
 
-    function stockAt(base, target, t, pathType) {
-      const x = t / N_PERIODS;
-      if (pathType === "linear") {
-        return base + (target - base) * x;
+    function normalizedSCurve(progress, steepness = 8) {
+      const p = Math.max(0, Math.min(1, progress));
+      const lo = sigmoid(-steepness / 2);
+      const hi = sigmoid(steepness / 2);
+      return (sigmoid(steepness * (p - 0.5)) - lo) / (hi - lo);
+    }
+
+    function stockAt(base, target, t, breakthroughYear) {
+      const x = Math.max(0, Math.min(1, t / N_PERIODS));
+      const clampedBreakthrough = Math.max(START_YEAR, Math.min(END_YEAR, Number(breakthroughYear) || START_YEAR));
+      const b = (clampedBreakthrough - START_YEAR) / N_PERIODS;
+
+      const preBreakShare = 0.4;
+      let shiftedProgress;
+      if (x <= b) {
+        const preProgress = b === 0 ? 1 : x / b;
+        shiftedProgress = preBreakShare * Math.pow(preProgress, 1.8);
+      } else {
+        const postProgress = b === 1 ? 1 : (x - b) / (1 - b);
+        shiftedProgress = preBreakShare + (1 - preBreakShare) * Math.pow(postProgress, 0.7);
       }
 
-      if (pathType === "logistic") {
-        const steepness = 8;
-        const lo = sigmoid(-steepness / 2);
-        const hi = sigmoid(steepness / 2);
-        const normalized = (sigmoid(steepness * (x - 0.5)) - lo) / (hi - lo);
-        return base + (target - base) * normalized;
-      }
-
-      if (base <= 0 || target <= 0) {
-        return base + (target - base) * x;
-      }
-      return base * (target / base) ** x;
+      const normalized = normalizedSCurve(shiftedProgress);
+      return base + (target - base) * normalized;
     }
 
     function project(params, year) {
       const t = year - START_YEAR;
-      const pathType = adoptionPath.value;
       const gInd = cagr(params.baseIndustrialM, params.targetIndustrialM);
       const gWh = cagr(params.baseWarehouseM, params.targetWarehouseM);
       const gHum = cagr(params.baseHumanoidM, params.targetHumanoidM);
       const gCon = cagr(params.baseConsumerM, params.targetConsumerM);
 
-      const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
-      const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
-      const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
-      const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
+      const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, params.breakthroughYear);
+      const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, params.breakthroughYear);
+      const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, params.breakthroughYear);
+      const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, params.breakthroughYear);
 
-      const prevIndustrialM = t === 0 ? industrialM : stockAt(params.baseIndustrialM, params.targetIndustrialM, t - 1, pathType);
-      const prevWarehouseM = t === 0 ? warehouseM : stockAt(params.baseWarehouseM, params.targetWarehouseM, t - 1, pathType);
-      const prevHumanoidM = t === 0 ? humanoidM : stockAt(params.baseHumanoidM, params.targetHumanoidM, t - 1, pathType);
-      const prevConsumerM = t === 0 ? consumerM : stockAt(params.baseConsumerM, params.targetConsumerM, t - 1, pathType);
+      const prevIndustrialM = t === 0 ? industrialM : stockAt(params.baseIndustrialM, params.targetIndustrialM, t - 1, params.breakthroughYear);
+      const prevWarehouseM = t === 0 ? warehouseM : stockAt(params.baseWarehouseM, params.targetWarehouseM, t - 1, params.breakthroughYear);
+      const prevHumanoidM = t === 0 ? humanoidM : stockAt(params.baseHumanoidM, params.targetHumanoidM, t - 1, params.breakthroughYear);
+      const prevConsumerM = t === 0 ? consumerM : stockAt(params.baseConsumerM, params.targetConsumerM, t - 1, params.breakthroughYear);
 
       const life = Math.max(1, Math.round(params.usefulLifeYears || 1));
       const retireT = t - life;
-      const retiredIndustrialM = retireT >= 0 ? stockAt(params.baseIndustrialM, params.targetIndustrialM, retireT, pathType) : 0;
-      const retiredWarehouseM = retireT >= 0 ? stockAt(params.baseWarehouseM, params.targetWarehouseM, retireT, pathType) : 0;
-      const retiredHumanoidM = retireT >= 0 ? stockAt(params.baseHumanoidM, params.targetHumanoidM, retireT, pathType) : 0;
-      const retiredConsumerM = retireT >= 0 ? stockAt(params.baseConsumerM, params.targetConsumerM, retireT, pathType) : 0;
+      const retiredIndustrialM = retireT >= 0 ? stockAt(params.baseIndustrialM, params.targetIndustrialM, retireT, params.breakthroughYear) : 0;
+      const retiredWarehouseM = retireT >= 0 ? stockAt(params.baseWarehouseM, params.targetWarehouseM, retireT, params.breakthroughYear) : 0;
+      const retiredHumanoidM = retireT >= 0 ? stockAt(params.baseHumanoidM, params.targetHumanoidM, retireT, params.breakthroughYear) : 0;
+      const retiredConsumerM = retireT >= 0 ? stockAt(params.baseConsumerM, params.targetConsumerM, retireT, params.breakthroughYear) : 0;
 
       const deployIndustrialM = Math.max(0, industrialM - prevIndustrialM + retiredIndustrialM);
       const deployWarehouseM = Math.max(0, warehouseM - prevWarehouseM + retiredWarehouseM);
@@ -333,6 +353,7 @@
 
       return {
         industrialM, warehouseM, humanoidM, consumerM,
+        deployIndustrialM, deployWarehouseM, deployHumanoidM, deployConsumerM,
         retirementM, deploymentM,
         directTWh, aiTWh, totalTWh,
         gridTWh: params.regionalGridTWh,
@@ -341,45 +362,29 @@
     }
 
     function updateModelSummary() {
-      const mode = adoptionPath.value;
-      const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li>`;
-
-      const byMode = {
-        exponential: {
-          title: "Exponential path (constant CAGR)",
-          body: "Stocks compound each year at a constant percentage rate that exactly links 2025 to 2050 levels.",
-          eq: "stock<sub>t</sub> = base × (target / base)<sup>t / N</sup>"
-        },
-        linear: {
-          title: "Linear path",
-          body: "Stocks add the same absolute amount each year, creating a straight-line adoption ramp from 2025 to 2050.",
-          eq: "stock<sub>t</sub> = base + (target - base) × (t / N)"
-        },
-        logistic: {
-          title: "Logistic S-curve path",
-          body: "Adoption starts slower, accelerates in the middle years, then tapers as it approaches 2050 targets.",
-          eq: "stock<sub>t</sub> = base + (target - base) × normalized(1 / (1 + e<sup>-k(x-0.5)</sup>), x=t/N)"
-        }
-      };
-
-      const content = byMode[mode];
       modelSummary.innerHTML = `
-        <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
+        <p><strong>Model summary:</strong> Breakthrough-shifted S-curve path. Adoption is intentionally slower before the breakthrough year, then accelerates once the breakthrough is reached, and finally tapers toward 2050 targets.</p>
         <ul>
-          <li><strong>Adoption equation:</strong> ${content.eq}</li>
-          ${common}
+          <li><strong>Adoption equation:</strong> stock<sub>t</sub> = base + (target - base) × normalizedS(breakthroughShift(t/N, breakthroughYear)).</li>
+          <li><strong>Breakthrough shift:</strong> Before breakthrough, progress is damped (power &gt; 1). After breakthrough, progress is amplified (power &lt; 1) so yearly additions accelerate post-breakthrough.</li>
+          <li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li>
+          <li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li><li><strong>Chart toggle:</strong> switch between electricity demand (TWh) curves and annual robot sales (million units/year) curves.</li>
         </ul>
       `;
     }
 
     function aggregate(year, picks) {
-      const a = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
+      const a = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, deployIndustrialM: 0, deployWarehouseM: 0, deployHumanoidM: 0, deployConsumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
       picks.forEach(name => {
         const p = project(regions[name], year);
         a.industrialM += p.industrialM;
+        a.deployIndustrialM += p.deployIndustrialM;
         a.warehouseM += p.warehouseM;
+        a.deployWarehouseM += p.deployWarehouseM;
         a.humanoidM += p.humanoidM;
+        a.deployHumanoidM += p.deployHumanoidM;
         a.consumerM += p.consumerM;
+        a.deployConsumerM += p.deployConsumerM;
         a.retirementM += p.retirementM;
         a.deploymentM += p.deploymentM;
         a.directTWh += p.directTWh;
@@ -430,34 +435,42 @@
         updateAll();
       });
 
+      toggleStockInputsBtn.addEventListener("click", () => {
+        const willShow = stockInputGrid.style.display === "none";
+        stockInputGrid.style.display = willShow ? "grid" : "none";
+        toggleStockInputsBtn.textContent = willShow ? "Hide starting/ending stock inputs" : "Show starting/ending stock inputs";
+      });
+
+      salesViewToggle.addEventListener("change", updateAll);
       pivotMode.addEventListener("change", updateAll);
       pivotYear.addEventListener("input", updateAll);
-      adoptionPath.addEventListener("change", () => {
-        updateGrowthOutputs();
-        updateModelSummary();
-        updateAll();
-      });
     }
 
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
-      schema.forEach(([key, label, step]) => {
+      stockInputGrid.innerHTML = "";
+
+      function renderField([key, label, step], container) {
         const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
-        inputGrid.insertAdjacentHTML("beforeend", `
+        container.insertAdjacentHTML("beforeend", `
           <div class="field">
             <label for="${key}">${label}</label>
-            <input type="number" id="${key}" step="${step}" value="${value}" ${key === "usefulLifeYears" ? "min=\"3\"" : "min=\"0\""} />
+            <input type="number" id="${key}" step="${step}" value="${value}" ${key === "usefulLifeYears" ? "min=\"3\"" : key === "breakthroughYear" ? `min=\"${START_YEAR}\" max=\"${END_YEAR}\"` : "min=\"0\""} />
           </div>
         `);
-      });
+      }
 
-      inputGrid.querySelectorAll("input").forEach(input => {
+      coreSchema.forEach(item => renderField(item, inputGrid));
+      stockSchema.forEach(item => renderField(item, stockInputGrid));
+
+      document.querySelectorAll("#inputGrid input, #stockInputGrid input").forEach(input => {
         input.addEventListener("input", () => {
           const key = input.id;
           let v = Number(input.value);
           if (!Number.isFinite(v)) v = 0;
           if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
+          if (key === "breakthroughYear") v = Math.max(START_YEAR, Math.min(END_YEAR, Math.round(v)));
           regions[editorRegion.value][key] = v;
           updateGrowthOutputs();
           updateAll();
@@ -561,9 +574,23 @@
       }
 
       const series = YEARS.map(y => aggregate(y, picks));
-      chart.data.datasets[0].data = series.map(s => Number(s.directTWh.toFixed(1)));
-      chart.data.datasets[1].data = series.map(s => Number(s.aiTWh.toFixed(1)));
-      chart.data.datasets[2].data = series.map(s => Number(s.totalTWh.toFixed(1)));
+      if (salesViewToggle.checked) {
+        chart.options.scales.y.title.text = "Million robots / year";
+        chart.data.datasets = [
+          { label: "Industrial Sales", data: series.map(s => Number(s.deployIndustrialM.toFixed(2))), borderColor: "#1d4ed8", backgroundColor: "#1d4ed820", tension: 0.2 },
+          { label: "Warehouse Sales", data: series.map(s => Number(s.deployWarehouseM.toFixed(2))), borderColor: "#7c3aed", backgroundColor: "#7c3aed20", tension: 0.2 },
+          { label: "Humanoid Sales", data: series.map(s => Number(s.deployHumanoidM.toFixed(2))), borderColor: "#ea580c", backgroundColor: "#ea580c20", tension: 0.2 },
+          { label: "Consumer Sales", data: series.map(s => Number(s.deployConsumerM.toFixed(2))), borderColor: "#0891b2", backgroundColor: "#0891b220", tension: 0.2 },
+          { label: "Total Sales", data: series.map(s => Number(s.deploymentM.toFixed(2))), borderColor: "#0f766e", backgroundColor: "#0f766e20", tension: 0.2 }
+        ];
+      } else {
+        chart.options.scales.y.title.text = "TWh";
+        chart.data.datasets = [
+          { label: "Direct TWh", data: series.map(s => Number(s.directTWh.toFixed(1))), borderColor: "#1d4ed8", backgroundColor: "#1d4ed820", tension: 0.2 },
+          { label: "AI/Cloud TWh", data: series.map(s => Number(s.aiTWh.toFixed(1))), borderColor: "#0ea5e9", backgroundColor: "#0ea5e920", tension: 0.2 },
+          { label: "Total TWh", data: series.map(s => Number(s.totalTWh.toFixed(1))), borderColor: "#0f766e", backgroundColor: "#0f766e20", tension: 0.2 }
+        ];
+      }
       chart.update();
 
       const y2050 = series[series.length - 1];
