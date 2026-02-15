@@ -31,6 +31,10 @@
     .region-grid label { font-weight: 600; }
 
     .input-grid { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); gap: 8px; }
+    .section-toggle { margin: 10px 0 8px; }
+    .section-toggle button { border: 1px solid #c9d7f2; border-radius: 8px; padding: 7px 10px; background: #eff6ff; cursor: pointer; font-weight: 600; color: #1e40af; }
+    .collapsible { overflow: hidden; transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 0; opacity: 0; }
+    .collapsible.open { max-height: 500px; opacity: 1; margin-bottom: 10px; }
     .field label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 3px; color: #334155; }
     .field input { width: 100%; border: 1px solid #c7d2fe; border-radius: 8px; padding: 7px; }
 
@@ -91,6 +95,12 @@
           </select>
         </div>
 
+        <div class="section-toggle">
+          <button id="stockAssumptionsBtn" type="button" aria-expanded="false" aria-controls="stockInputs">Stock Assumptions ▼</button>
+        </div>
+        <div id="stockInputs" class="collapsible">
+          <div id="stockInputGrid" class="input-grid"></div>
+        </div>
         <div id="inputGrid" class="input-grid"></div>
 
         <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
@@ -240,6 +250,9 @@
     const regionFilters = document.getElementById("regionFilters");
     const editorRegion = document.getElementById("editorRegion");
     const inputGrid = document.getElementById("inputGrid");
+    const stockInputGrid = document.getElementById("stockInputGrid");
+    const stockInputs = document.getElementById("stockInputs");
+    const stockAssumptionsBtn = document.getElementById("stockAssumptionsBtn");
     const pivotBody = document.getElementById("pivotBody");
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
@@ -253,6 +266,14 @@
       humanoid: document.getElementById("outHumanoidCagr"),
       consumer: document.getElementById("outConsumerCagr")
     };
+
+    const stockKeys = new Set([
+      "baseIndustrialM", "targetIndustrialM",
+      "baseWarehouseM", "targetWarehouseM",
+      "baseHumanoidM", "targetHumanoidM",
+      "baseConsumerM", "targetConsumerM"
+    ]);
+    let showStockAssumptions = false;
 
     function fmt(n, d = 2) { return Number(n).toFixed(d); }
     function cagr(start, end) {
@@ -437,22 +458,38 @@
         updateModelSummary();
         updateAll();
       });
+      stockAssumptionsBtn.addEventListener("click", () => {
+        showStockAssumptions = !showStockAssumptions;
+        updateStockToggle();
+      });
+    }
+
+    function updateStockToggle() {
+      stockInputs.classList.toggle("open", showStockAssumptions);
+      stockAssumptionsBtn.setAttribute("aria-expanded", String(showStockAssumptions));
+      stockAssumptionsBtn.textContent = showStockAssumptions ? "Stock Assumptions ▲" : "Stock Assumptions ▼";
     }
 
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
+      stockInputGrid.innerHTML = "";
       schema.forEach(([key, label, step]) => {
         const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
-        inputGrid.insertAdjacentHTML("beforeend", `
+        const fieldHtml = `
           <div class="field">
             <label for="${key}">${label}</label>
             <input type="number" id="${key}" step="${step}" value="${value}" ${key === "usefulLifeYears" ? "min=\"3\"" : "min=\"0\""} />
           </div>
-        `);
+        `;
+        if (stockKeys.has(key)) {
+          stockInputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        } else {
+          inputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        }
       });
 
-      inputGrid.querySelectorAll("input").forEach(input => {
+      document.querySelectorAll("#stockInputGrid input, #inputGrid input").forEach(input => {
         input.addEventListener("input", () => {
           const key = input.id;
           let v = Number(input.value);
@@ -463,6 +500,7 @@
           updateAll();
         });
       });
+      updateStockToggle();
     }
 
     const chart = new Chart(document.getElementById("trendChart"), {
