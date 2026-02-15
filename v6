@@ -111,13 +111,6 @@
 
         <div id="inputGrid" class="input-grid"></div>
 
-        <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
-        <div class="output-grid">
-          <div class="out"><div class="k">Industrial CAGR</div><div id="outIndustrialCagr" class="v">-</div></div>
-          <div class="out"><div class="k">Warehouse CAGR</div><div id="outWarehouseCagr" class="v">-</div></div>
-          <div class="out"><div class="k">Humanoid CAGR</div><div id="outHumanoidCagr" class="v">-</div></div>
-          <div class="out"><div class="k">Consumer CAGR</div><div id="outConsumerCagr" class="v">-</div></div>
-        </div>
 
         <div id="selectionStatus" class="status"></div>
 
@@ -131,6 +124,14 @@
 
       <section class="card">
         <h2>Demand Trajectory (Selected Regions)</h2>
+        <div class="toolbar">
+          <label for="trendMetric"><strong>Chart metric:</strong></label>
+          <select id="trendMetric">
+            <option value="twh">TWh used</option>
+            <option value="sales">Annual robot sales</option>
+            <option value="stock">Total robot stock</option>
+          </select>
+        </div>
         <canvas id="trendChart" height="220"></canvas>
         <div class="summary" id="modelSummary"></div>
       </section>
@@ -270,13 +271,7 @@
     const status = document.getElementById("selectionStatus");
     const adoptionPath = document.getElementById("adoptionPath");
     const modelSummary = document.getElementById("modelSummary");
-
-    const cagrOutputMap = {
-      industrial: document.getElementById("outIndustrialCagr"),
-      warehouse: document.getElementById("outWarehouseCagr"),
-      humanoid: document.getElementById("outHumanoidCagr"),
-      consumer: document.getElementById("outConsumerCagr")
-    };
+    const trendMetric = document.getElementById("trendMetric");
 
     const stockKeys = new Set([
       "baseIndustrialM", "targetIndustrialM",
@@ -289,10 +284,6 @@
     let showKwhAssumptions = false;
 
     function fmt(n, d = 2) { return Number(n).toFixed(d); }
-    function cagr(start, end) {
-      if (start <= 0 || end <= 0) return 0;
-      return (end / start) ** (1 / N_PERIODS) - 1;
-    }
 
     function selectedRegions() {
       return Array.from(regionFilters.querySelectorAll("input:checked")).map(x => x.dataset.region);
@@ -334,11 +325,6 @@
     function project(params, year) {
       const t = year - START_YEAR;
       const pathType = adoptionPath.value;
-      const gInd = cagr(params.baseIndustrialM, params.targetIndustrialM);
-      const gWh = cagr(params.baseWarehouseM, params.targetWarehouseM);
-      const gHum = cagr(params.baseHumanoidM, params.targetHumanoidM);
-      const gCon = cagr(params.baseConsumerM, params.targetConsumerM);
-
       const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
       const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
       const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
@@ -378,8 +364,7 @@
         industrialM, warehouseM, humanoidM, consumerM,
         retirementM, deploymentM,
         directTWh, aiTWh, totalTWh,
-        gridTWh: params.regionalGridTWh,
-        gInd, gWh, gHum, gCon
+        gridTWh: params.regionalGridTWh
       };
     }
 
@@ -433,19 +418,6 @@
       a.sharePct = a.gridTWh ? (a.totalTWh / a.gridTWh) * 100 : 0;
       return a;
     }
-
-    function updateGrowthOutputs() {
-      const r = regions[editorRegion.value];
-      const gInd = cagr(r.baseIndustrialM, r.targetIndustrialM);
-      const gWh = cagr(r.baseWarehouseM, r.targetWarehouseM);
-      const gHum = cagr(r.baseHumanoidM, r.targetHumanoidM);
-      const gCon = cagr(r.baseConsumerM, r.targetConsumerM);
-      cagrOutputMap.industrial.textContent = `${fmt(gInd * 100, 2)}%`;
-      cagrOutputMap.warehouse.textContent = `${fmt(gWh * 100, 2)}%`;
-      cagrOutputMap.humanoid.textContent = `${fmt(gHum * 100, 2)}%`;
-      cagrOutputMap.consumer.textContent = `${fmt(gCon * 100, 2)}%`;
-    }
-
     function buildControls() {
       regionNames.forEach((name, i) => {
         const id = `reg_${i}`;
@@ -455,7 +427,6 @@
       regionFilters.querySelectorAll("input").forEach(c => c.addEventListener("change", updateAll));
       editorRegion.addEventListener("change", () => {
         renderInputs();
-        updateGrowthOutputs();
       });
 
       document.getElementById("selectAllBtn").addEventListener("click", () => {
@@ -469,15 +440,17 @@
       document.getElementById("resetDefaultsBtn").addEventListener("click", () => {
         regions = JSON.parse(JSON.stringify(defaultRegions));
         renderInputs();
-        updateGrowthOutputs();
         updateAll();
       });
 
       pivotMode.addEventListener("change", updateAll);
       pivotYear.addEventListener("input", updateAll);
       adoptionPath.addEventListener("change", () => {
-        updateGrowthOutputs();
         updateModelSummary();
+        updateAll();
+      });
+      trendMetric.addEventListener("change", () => {
+        applyChartMetric();
         updateAll();
       });
       stockAssumptionsBtn.addEventListener("click", () => {
@@ -530,7 +503,6 @@
           if (!Number.isFinite(v)) v = 0;
           if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
           regions[editorRegion.value][key] = v;
-          updateGrowthOutputs();
           updateAll();
         });
       });
@@ -538,15 +510,40 @@
       updateKwhToggle();
     }
 
+    const chartConfigs = {
+      twh: {
+        yTitle: "TWh",
+        datasets: [
+          { label: "Direct TWh", borderColor: "#1d4ed8", backgroundColor: "#1d4ed820" },
+          { label: "AI/Cloud TWh", borderColor: "#0ea5e9", backgroundColor: "#0ea5e920" },
+          { label: "Total TWh", borderColor: "#0f766e", backgroundColor: "#0f766e20" }
+        ]
+      },
+      sales: {
+        yTitle: "Annual robot sales (M)",
+        datasets: [
+          { label: "Annual robot sales (M)", borderColor: "#7c3aed", backgroundColor: "#7c3aed20" }
+        ]
+      },
+      stock: {
+        yTitle: "Total robot stock (M)",
+        datasets: [
+          { label: "Total robot stock (M)", borderColor: "#ea580c", backgroundColor: "#ea580c20" }
+        ]
+      }
+    };
+
+    function applyChartMetric() {
+      const config = chartConfigs[trendMetric.value] || chartConfigs.twh;
+      chart.data.datasets = config.datasets.map(ds => ({ ...ds, data: [], tension: 0.2 }));
+      chart.options.scales.y.title.text = config.yTitle;
+    }
+
     const chart = new Chart(document.getElementById("trendChart"), {
       type: "line",
       data: {
         labels: YEARS,
-        datasets: [
-          { label: "Direct TWh", data: [], borderColor: "#1d4ed8", backgroundColor: "#1d4ed820", tension: 0.2 },
-          { label: "AI/Cloud TWh", data: [], borderColor: "#0ea5e9", backgroundColor: "#0ea5e920", tension: 0.2 },
-          { label: "Total TWh", data: [], borderColor: "#0f766e", backgroundColor: "#0f766e20", tension: 0.2 }
-        ]
+        datasets: []
       },
       options: {
         responsive: true,
@@ -554,6 +551,7 @@
         scales: { y: { title: { display: true, text: "TWh" } }, x: { title: { display: true, text: "Year" } } }
       }
     });
+    applyChartMetric();
 
     function rowHtml(label, d, total = false) {
       return `
@@ -634,9 +632,15 @@
       }
 
       const series = YEARS.map(y => aggregate(y, picks));
-      chart.data.datasets[0].data = series.map(s => Number(s.directTWh.toFixed(1)));
-      chart.data.datasets[1].data = series.map(s => Number(s.aiTWh.toFixed(1)));
-      chart.data.datasets[2].data = series.map(s => Number(s.totalTWh.toFixed(1)));
+      if (trendMetric.value === "sales") {
+        chart.data.datasets[0].data = series.map(s => Number(s.deploymentM.toFixed(2)));
+      } else if (trendMetric.value === "stock") {
+        chart.data.datasets[0].data = series.map(s => Number((s.industrialM + s.warehouseM + s.humanoidM + s.consumerM).toFixed(2)));
+      } else {
+        chart.data.datasets[0].data = series.map(s => Number(s.directTWh.toFixed(1)));
+        chart.data.datasets[1].data = series.map(s => Number(s.aiTWh.toFixed(1)));
+        chart.data.datasets[2].data = series.map(s => Number(s.totalTWh.toFixed(1)));
+      }
       chart.update();
 
       const y2050 = series[series.length - 1];
@@ -650,7 +654,6 @@
 
     buildControls();
     renderInputs();
-    updateGrowthOutputs();
     updateModelSummary();
     updateAll();
   </script>
