@@ -423,26 +423,6 @@
       pivotYear.addEventListener("input", updateAll);
     }
 
-    function normalizeFieldValue(key, rawValue) {
-      let v = Number(rawValue);
-      if (!Number.isFinite(v)) v = 0;
-      if (key === "usefulLifeYears") return Math.max(3, Math.round(v));
-      if (key === "breakthroughYear") return Math.max(START_YEAR, Math.min(END_YEAR, Math.round(v)));
-      return v;
-    }
-
-    function applyEditorInputs() {
-      const region = editorRegion.value;
-      inputGrid.querySelectorAll("input").forEach(input => {
-        const normalized = normalizeFieldValue(input.id, input.value);
-        regions[region][input.id] = normalized;
-        input.value = input.id === "aiMultiplier" ? fmt(normalized, 3) : normalized;
-      });
-      inputDirtyState.textContent = "No pending changes.";
-      updateGrowthOutputs();
-      updateAll();
-    }
-
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
@@ -458,13 +438,14 @@
 
       inputGrid.querySelectorAll("input").forEach(input => {
         input.addEventListener("input", () => {
-          inputDirtyState.textContent = "Pending changes. Click Apply changes to refresh chart + table.";
-        });
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            applyEditorInputs();
-          }
+          const key = input.id;
+          let v = Number(input.value);
+          if (!Number.isFinite(v)) v = 0;
+          if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
+          if (key === "breakthroughYear") v = Math.max(START_YEAR, Math.min(END_YEAR, Math.round(v)));
+          regions[editorRegion.value][key] = v;
+          updateGrowthOutputs();
+          updateAll();
         });
       });
     }
