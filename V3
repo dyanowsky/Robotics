@@ -86,10 +86,10 @@
         </div>
 
         <div id="inputGrid" class="input-grid"></div>
-        <div class="toolbar" style="margin-top:8px;">
-          <button id="toggleStockInputsBtn" type="button">Show starting/ending stock inputs</button>
+        <div class="toolbar">
+          <button id="applyInputBtn" type="button">Apply changes</button>
+          <span class="small" id="inputDirtyState" style="margin:0;">No pending changes.</span>
         </div>
-        <div id="stockInputGrid" class="input-grid" style="display:none;"></div>
 
         <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
         <div class="output-grid">
@@ -253,9 +253,8 @@
     const regionFilters = document.getElementById("regionFilters");
     const editorRegion = document.getElementById("editorRegion");
     const inputGrid = document.getElementById("inputGrid");
-    const stockInputGrid = document.getElementById("stockInputGrid");
-    const toggleStockInputsBtn = document.getElementById("toggleStockInputsBtn");
-    const salesViewToggle = document.getElementById("salesViewToggle");
+    const applyInputBtn = document.getElementById("applyInputBtn");
+    const inputDirtyState = document.getElementById("inputDirtyState");
     const pivotBody = document.getElementById("pivotBody");
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
@@ -368,7 +367,7 @@
           <li><strong>Adoption equation:</strong> stock<sub>t</sub> = base + (target - base) × normalizedS(breakthroughShift(t/N, breakthroughYear)).</li>
           <li><strong>Breakthrough shift:</strong> Before breakthrough, progress is damped (power &gt; 1). After breakthrough, progress is amplified (power &lt; 1) so yearly additions accelerate post-breakthrough.</li>
           <li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li>
-          <li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li><li><strong>Chart toggle:</strong> switch between electricity demand (TWh) curves and annual robot sales (million units/year) curves.</li>
+          <li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li>
         </ul>
       `;
     }
@@ -417,6 +416,7 @@
       regionFilters.querySelectorAll("input").forEach(c => c.addEventListener("change", updateAll));
       editorRegion.addEventListener("change", () => {
         renderInputs();
+        inputDirtyState.textContent = "No pending changes.";
         updateGrowthOutputs();
       });
 
@@ -431,17 +431,13 @@
       document.getElementById("resetDefaultsBtn").addEventListener("click", () => {
         regions = JSON.parse(JSON.stringify(defaultRegions));
         renderInputs();
+        inputDirtyState.textContent = "No pending changes.";
         updateGrowthOutputs();
         updateAll();
       });
 
-      toggleStockInputsBtn.addEventListener("click", () => {
-        const willShow = stockInputGrid.style.display === "none";
-        stockInputGrid.style.display = willShow ? "grid" : "none";
-        toggleStockInputsBtn.textContent = willShow ? "Hide starting/ending stock inputs" : "Show starting/ending stock inputs";
-      });
+      applyInputBtn.addEventListener("click", applyEditorInputs);
 
-      salesViewToggle.addEventListener("change", updateAll);
       pivotMode.addEventListener("change", updateAll);
       pivotYear.addEventListener("input", updateAll);
     }
