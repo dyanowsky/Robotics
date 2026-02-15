@@ -72,7 +72,7 @@
 <body>
   <div class="container">
     <h1>Robotics Adoption → Electricity Demand (2025–2050)</h1>
-    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Add useful life to include robot retirements and replacement deployments.</p>
+    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Add useful life and per-robot annual kWh to control electricity assumptions directly.</p>
 
     <div class="layout">
       <section class="card">
@@ -101,6 +101,14 @@
         <div id="stockInputs" class="collapsible">
           <div id="stockInputGrid" class="input-grid"></div>
         </div>
+
+        <div class="section-toggle">
+          <button id="kwhAssumptionsBtn" type="button" aria-expanded="false" aria-controls="kwhInputs">kWh Assumptions ▼</button>
+        </div>
+        <div id="kwhInputs" class="collapsible">
+          <div id="kwhInputGrid" class="input-grid"></div>
+        </div>
+
         <div id="inputGrid" class="input-grid"></div>
 
         <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
@@ -194,8 +202,7 @@
         baseHumanoidM: 0.00004, targetHumanoidM: 127.87,
         baseConsumerM: 0.00172, targetConsumerM: 354.10,
         usefulLifeYears: 5,
-        industrialHoursPerDay: 16, warehouseHoursPerDay: 16, humanoidHoursPerDay: 10, consumerHoursPerDay: 1.2,
-        industrialKw: 3.77, warehouseKw: 2.43, humanoidKw: 0.53, consumerKw: 0.96,
+        industrialAnnualKwh: 22015.2, warehouseAnnualKwh: 14191.2, humanoidAnnualKwh: 1934.5, consumerAnnualKwh: 420.5,
         aiMultiplier: 0.62, regionalGridTWh: 9800
       },
       Europe: {
@@ -204,8 +211,7 @@
         baseHumanoidM: 0.000001, targetHumanoidM: 14.87,
         baseConsumerM: 0.000089, targetConsumerM: 66.91,
         usefulLifeYears: 6,
-        industrialHoursPerDay: 16, warehouseHoursPerDay: 16, humanoidHoursPerDay: 10, consumerHoursPerDay: 1.2,
-        industrialKw: 3.56, warehouseKw: 2.48, humanoidKw: 0.50, consumerKw: 0.91,
+        industrialAnnualKwh: 20790.4, warehouseAnnualKwh: 14476.8, humanoidAnnualKwh: 1825.0, consumerAnnualKwh: 398.6,
         aiMultiplier: 0.56, regionalGridTWh: 4300
       },
       "United States": {
@@ -214,8 +220,7 @@
         baseHumanoidM: 0.000013, targetHumanoidM: 32.87,
         baseConsumerM: 0.000705, targetConsumerM: 111.23,
         usefulLifeYears: 5,
-        industrialHoursPerDay: 16, warehouseHoursPerDay: 16, humanoidHoursPerDay: 10, consumerHoursPerDay: 1.2,
-        industrialKw: 3.66, warehouseKw: 2.57, humanoidKw: 0.52, consumerKw: 0.94,
+        industrialAnnualKwh: 21374.4, warehouseAnnualKwh: 15008.8, humanoidAnnualKwh: 1898.0, consumerAnnualKwh: 411.7,
         aiMultiplier: 0.64, regionalGridTWh: 4700
       },
       ROW: {
@@ -224,8 +229,7 @@
         baseHumanoidM: 0.000001, targetHumanoidM: 38.82,
         baseConsumerM: 0.000090, targetConsumerM: 135.88,
         usefulLifeYears: 5,
-        industrialHoursPerDay: 16, warehouseHoursPerDay: 16, humanoidHoursPerDay: 10, consumerHoursPerDay: 1.2,
-        industrialKw: 3.49, warehouseKw: 2.36, humanoidKw: 0.48, consumerKw: 0.89,
+        industrialAnnualKwh: 20381.6, warehouseAnnualKwh: 13782.4, humanoidAnnualKwh: 1752.0, consumerAnnualKwh: 389.8,
         aiMultiplier: 0.54, regionalGridTWh: 11800
       }
     };
@@ -242,14 +246,10 @@
       ["baseConsumerM", "Consumer robots in 2025 (M)", 1],
       ["targetConsumerM", "Consumer robots in 2050 (M)", 1],
       ["usefulLifeYears", "Useful life (years, e.g., 3-6)", 1],
-      ["industrialHoursPerDay", "Industrial runtime (hours/day)", 0.1],
-      ["warehouseHoursPerDay", "Warehouse runtime (hours/day)", 0.1],
-      ["humanoidHoursPerDay", "Humanoid runtime (hours/day)", 0.1],
-      ["consumerHoursPerDay", "Consumer runtime (hours/day)", 0.1],
-      ["industrialKw", "Industrial operating load (kW)", 0.01],
-      ["warehouseKw", "Warehouse operating load (kW)", 0.01],
-      ["humanoidKw", "Humanoid operating load (kW)", 0.01],
-      ["consumerKw", "Consumer operating load (kW)", 0.01],
+      ["industrialAnnualKwh", "Industrial kWh per robot per year", 1],
+      ["warehouseAnnualKwh", "Warehouse kWh per robot per year", 1],
+      ["humanoidAnnualKwh", "Humanoid kWh per robot per year", 1],
+      ["consumerAnnualKwh", "Consumer kWh per robot per year", 1],
       ["aiMultiplier", "AI/Cloud multiplier", 0.01],
       ["regionalGridTWh", "Regional baseline electricity (TWh)", 100]
     ];
@@ -261,6 +261,9 @@
     const stockInputGrid = document.getElementById("stockInputGrid");
     const stockInputs = document.getElementById("stockInputs");
     const stockAssumptionsBtn = document.getElementById("stockAssumptionsBtn");
+    const kwhInputs = document.getElementById("kwhInputs");
+    const kwhInputGrid = document.getElementById("kwhInputGrid");
+    const kwhAssumptionsBtn = document.getElementById("kwhAssumptionsBtn");
     const pivotBody = document.getElementById("pivotBody");
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
@@ -281,7 +284,9 @@
       "baseHumanoidM", "targetHumanoidM",
       "baseConsumerM", "targetConsumerM"
     ]);
+    const kwhKeys = new Set(["industrialAnnualKwh", "warehouseAnnualKwh", "humanoidAnnualKwh", "consumerAnnualKwh"]);
     let showStockAssumptions = false;
+    let showKwhAssumptions = false;
 
     function fmt(n, d = 2) { return Number(n).toFixed(d); }
     function cagr(start, end) {
@@ -295,6 +300,15 @@
 
     function sigmoid(x) {
       return 1 / (1 + Math.exp(-x));
+    }
+
+
+    function annualKWh(params, type) {
+      const directInput = params[`${type}AnnualKwh`];
+      if (Number.isFinite(directInput) && directInput >= 0) return directInput;
+      const hours = params[`${type}HoursPerDay`] ?? 0;
+      const kw = params[`${type}Kw`] ?? 0;
+      return Math.max(0, hours * kw * 365);
     }
 
     function stockAt(base, target, t, pathType) {
@@ -470,6 +484,10 @@
         showStockAssumptions = !showStockAssumptions;
         updateStockToggle();
       });
+      kwhAssumptionsBtn.addEventListener("click", () => {
+        showKwhAssumptions = !showKwhAssumptions;
+        updateKwhToggle();
+      });
     }
 
     function updateStockToggle() {
@@ -478,10 +496,17 @@
       stockAssumptionsBtn.textContent = showStockAssumptions ? "Stock Assumptions ▲" : "Stock Assumptions ▼";
     }
 
+    function updateKwhToggle() {
+      kwhInputs.classList.toggle("open", showKwhAssumptions);
+      kwhAssumptionsBtn.setAttribute("aria-expanded", String(showKwhAssumptions));
+      kwhAssumptionsBtn.textContent = showKwhAssumptions ? "kWh Assumptions ▲" : "kWh Assumptions ▼";
+    }
+
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
       stockInputGrid.innerHTML = "";
+      kwhInputGrid.innerHTML = "";
       schema.forEach(([key, label, step]) => {
         const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
         const fieldHtml = `
@@ -492,25 +517,25 @@
         `;
         if (stockKeys.has(key)) {
           stockInputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        } else if (kwhKeys.has(key)) {
+          kwhInputGrid.insertAdjacentHTML("beforeend", fieldHtml);
         } else {
           inputGrid.insertAdjacentHTML("beforeend", fieldHtml);
         }
       });
-      updateDerivedKwhFields(r);
-
-      document.querySelectorAll("#stockInputGrid input, #inputGrid input").forEach(input => {
+      document.querySelectorAll("#stockInputGrid input, #kwhInputGrid input, #inputGrid input").forEach(input => {
         input.addEventListener("input", () => {
           const key = input.id;
           let v = Number(input.value);
           if (!Number.isFinite(v)) v = 0;
           if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
           regions[editorRegion.value][key] = v;
-          updateDerivedKwhFields(regions[editorRegion.value]);
           updateGrowthOutputs();
           updateAll();
         });
       });
       updateStockToggle();
+      updateKwhToggle();
     }
 
     const chart = new Chart(document.getElementById("trendChart"), {
