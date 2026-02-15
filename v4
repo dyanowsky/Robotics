@@ -35,7 +35,6 @@
     .section-toggle button { border: 1px solid #c9d7f2; border-radius: 8px; padding: 7px 10px; background: #eff6ff; cursor: pointer; font-weight: 600; color: #1e40af; }
     .collapsible { overflow: hidden; transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 0; opacity: 0; }
     .collapsible.open { max-height: 500px; opacity: 1; margin-bottom: 10px; }
-    .field input[readonly] { background: #f8fafc; color: #334155; }
     .field label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 3px; color: #334155; }
     .field input { width: 100%; border: 1px solid #c7d2fe; border-radius: 8px; padding: 7px; }
 
@@ -102,14 +101,6 @@
         <div id="stockInputs" class="collapsible">
           <div id="stockInputGrid" class="input-grid"></div>
         </div>
-
-        <div class="section-toggle">
-          <button id="kwhAssumptionsBtn" type="button" aria-expanded="false" aria-controls="kwhInputs">kWh Assumptions ▼</button>
-        </div>
-        <div id="kwhInputs" class="collapsible">
-          <div id="kwhInputGrid" class="input-grid"></div>
-        </div>
-
         <div id="inputGrid" class="input-grid"></div>
 
         <h2 style="margin-top:12px;">Implied Growth Outputs (Editor Region)</h2>
@@ -270,9 +261,6 @@
     const stockInputGrid = document.getElementById("stockInputGrid");
     const stockInputs = document.getElementById("stockInputs");
     const stockAssumptionsBtn = document.getElementById("stockAssumptionsBtn");
-    const kwhInputGrid = document.getElementById("kwhInputGrid");
-    const kwhInputs = document.getElementById("kwhInputs");
-    const kwhAssumptionsBtn = document.getElementById("kwhAssumptionsBtn");
     const pivotBody = document.getElementById("pivotBody");
     const pivotMode = document.getElementById("pivotMode");
     const pivotYear = document.getElementById("pivotYear");
@@ -294,15 +282,6 @@
       "baseConsumerM", "targetConsumerM"
     ]);
     let showStockAssumptions = false;
-    let showKwhAssumptions = false;
-
-    const energyRobotTypes = ["industrial", "warehouse", "humanoid", "consumer"];
-
-    function annualKWh(params, robotType) {
-      const hoursPerDay = Math.max(0, Number(params[`${robotType}HoursPerDay`]) || 0);
-      const operatingKw = Math.max(0, Number(params[`${robotType}Kw`]) || 0);
-      return hoursPerDay * operatingKw * 365;
-    }
 
     function fmt(n, d = 2) { return Number(n).toFixed(d); }
     function cagr(start, end) {
@@ -491,10 +470,6 @@
         showStockAssumptions = !showStockAssumptions;
         updateStockToggle();
       });
-      kwhAssumptionsBtn.addEventListener("click", () => {
-        showKwhAssumptions = !showKwhAssumptions;
-        updateKwhToggle();
-      });
     }
 
     function updateStockToggle() {
@@ -503,24 +478,10 @@
       stockAssumptionsBtn.textContent = showStockAssumptions ? "Stock Assumptions ▲" : "Stock Assumptions ▼";
     }
 
-    function updateKwhToggle() {
-      kwhInputs.classList.toggle("open", showKwhAssumptions);
-      kwhAssumptionsBtn.setAttribute("aria-expanded", String(showKwhAssumptions));
-      kwhAssumptionsBtn.textContent = showKwhAssumptions ? "kWh Assumptions ▲" : "kWh Assumptions ▼";
-    }
-
-    function updateDerivedKwhFields(params) {
-      energyRobotTypes.forEach(robotType => {
-        const input = document.getElementById(`${robotType}KwhDerived`);
-        if (input) input.value = fmt(annualKWh(params, robotType), 1);
-      });
-    }
-
     function renderInputs() {
       const r = regions[editorRegion.value];
       inputGrid.innerHTML = "";
       stockInputGrid.innerHTML = "";
-      kwhInputGrid.innerHTML = "";
       schema.forEach(([key, label, step]) => {
         const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
         const fieldHtml = `
@@ -534,16 +495,6 @@
         } else {
           inputGrid.insertAdjacentHTML("beforeend", fieldHtml);
         }
-      });
-
-      energyRobotTypes.forEach(robotType => {
-        const title = robotType.charAt(0).toUpperCase() + robotType.slice(1);
-        kwhInputGrid.insertAdjacentHTML("beforeend", `
-          <div class="field">
-            <label for="${robotType}KwhDerived">${title} kWh per robot-year (derived)</label>
-            <input type="number" id="${robotType}KwhDerived" value="0" readonly />
-          </div>
-        `);
       });
       updateDerivedKwhFields(r);
 
@@ -560,7 +511,6 @@
         });
       });
       updateStockToggle();
-      updateKwhToggle();
     }
 
     const chart = new Chart(document.getElementById("trendChart"), {
