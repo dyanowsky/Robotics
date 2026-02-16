@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robotics Adoption Impact on Electricity Demand (2025–2050)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #fff;
+      --line: #dbe3f3;
+      --text: #172033;
+      --muted: #4b5568;
+      --good: #0f766e;
+      --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--text); background: var(--bg); }
+    .container { max-width: 1260px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 8px; }
+    h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    .subtitle { margin: 0 0 16px; color: var(--muted); }
+
+    .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; box-shadow: 0 8px 24px rgba(10, 20, 40, 0.04); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .toolbar button, .toolbar select, .toolbar input { border: 1px solid #c9d7f2; border-radius: 8px; padding: 7px 9px; background: white; }
+    .toolbar button { cursor: pointer; }
+    .logistic-controls { display: none; align-items: center; gap: 8px; margin-bottom: 10px; color: #334155; font-weight: 600; }
+    .logistic-controls.active { display: flex; }
+    .logistic-controls input[type="range"] { flex: 1; }
+    .logistic-controls .value { min-width: 24px; text-align: right; color: #1e40af; }
+    .region-grid { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px; }
+    .region-grid label { font-weight: 600; }
+
+    .input-grid { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); gap: 8px; }
+    .section-toggle { margin: 10px 0 8px; }
+    .section-toggle button { border: 1px solid #c9d7f2; border-radius: 8px; padding: 7px 10px; background: #eff6ff; cursor: pointer; font-weight: 600; color: #1e40af; }
+    .collapsible { overflow: hidden; transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 0; opacity: 0; }
+    .collapsible.open { max-height: 500px; opacity: 1; margin-bottom: 10px; }
+    .field label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 3px; color: #334155; }
+    .field input { width: 100%; border: 1px solid #c7d2fe; border-radius: 8px; padding: 7px; }
+
+    .output-grid { display: grid; grid-template-columns: repeat(2, minmax(170px, 1fr)); gap: 8px; margin-top: 10px; }
+    .out { border: 1px solid #dce9ff; border-radius: 10px; background: #f8fbff; padding: 8px; }
+    .out .k { font-size: 0.76rem; color: #475569; }
+    .out .v { font-size: 1rem; font-weight: 700; color: #1e40af; }
+
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 8px; margin-top: 10px; }
+    .kpi { border: 1px solid #dce9ff; border-radius: 10px; background: #f8fbff; padding: 9px; }
+    .kpi .k { font-size: 0.76rem; color: #475569; }
+    .kpi .v { font-size: 1.04rem; font-weight: 700; color: var(--good); }
+    .status { margin-top: 8px; font-size: 0.85rem; color: var(--warn); min-height: 18px; }
+
+    .table-wrap { overflow: auto; max-height: 500px; border: 1px solid var(--line); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1320px; }
+    th, td { border-bottom: 1px solid #e6edf8; padding: 8px 10px; text-align: right; font-size: 0.84rem; }
+    th { position: sticky; top: 0; z-index: 3; background: #eff6ff; color: #1e40af; text-align: center; }
+    td.left, th.left { text-align: left; position: sticky; left: 0; z-index: 2; background: #f9fbff; }
+    tr.total-row td { background: #f2f7ff; font-weight: 700; }
+    .small { color: var(--muted); font-size: 0.85rem; margin: 8px 0 10px; }
+    .summary { margin-top: 12px; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; background: #f8fbff; }
+    .summary p { margin: 0 0 8px; color: #1f2937; }
+    .summary ul { margin: 0; padding-left: 18px; color: #334155; }
+    .cite-list { margin: 0; padding-left: 20px; }
+    .cite-list li { margin-bottom: 7px; }
+
+    @media (max-width: 1020px) {
+      .layout { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .input-grid, .output-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Robotics Adoption → Electricity Demand (2025–2050)</h1>
+    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Useful life now feeds replacement retirements directly, so shorter life visibly increases annual sales needed to maintain target stock.</p>
+
+    <div class="layout">
+      <section class="card">
+        <h2>Scenario Controls</h2>
+        <div class="toolbar">
+          <button id="selectAllBtn" type="button">Select all regions</button>
+          <button id="clearAllBtn" type="button">Clear all regions</button>
+          <button id="resetDefaultsBtn" type="button">Reset defaults</button>
+        </div>
+        <div class="region-grid" id="regionFilters"></div>
+
+        <div class="toolbar">
+          <label for="editorRegion"><strong>Edit region:</strong></label>
+          <select id="editorRegion"></select>
+          <label for="adoptionPath"><strong>Adoption path:</strong></label>
+          <select id="adoptionPath">
+            <option value="exponential">Exponential (constant CAGR)</option>
+            <option value="linear">Linear</option>
+            <option value="logistic">Logistic S-curve</option>
+          </select>
+        </div>
+
+        <div id="logisticControls" class="logistic-controls" aria-live="polite">
+          <label for="logisticSteepness">Logistic steepness (k):</label>
+          <input id="logisticSteepness" type="range" min="1" max="25" step="1" value="8" />
+          <span id="logisticSteepnessValue" class="value">8</span>
+        </div>
+
+        <div class="section-toggle">
+          <button id="stockAssumptionsBtn" type="button" aria-expanded="false" aria-controls="stockInputs">Stock Assumptions ▼</button>
+        </div>
+        <div id="stockInputs" class="collapsible">
+          <div id="stockInputGrid" class="input-grid"></div>
+        </div>
+
+        <div class="section-toggle">
+          <button id="kwhAssumptionsBtn" type="button" aria-expanded="false" aria-controls="kwhInputs">kWh Assumptions ▼</button>
+        </div>
+        <div id="kwhInputs" class="collapsible">
+          <div id="kwhInputGrid" class="input-grid"></div>
+        </div>
+
+        <div id="inputGrid" class="input-grid"></div>
+
+
+        <div id="selectionStatus" class="status"></div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="k">2050 Direct TWh</div><div id="kpiDirect" class="v">-</div></div>
+          <div class="kpi"><div class="k">2050 AI/Cloud TWh</div><div id="kpiAI" class="v">-</div></div>
+          <div class="kpi"><div class="k">2050 Total TWh</div><div id="kpiTotal" class="v">-</div></div>
+          <div class="kpi"><div class="k">2050 Grid Share</div><div id="kpiShare" class="v">-</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Demand Trajectory (Selected Regions)</h2>
+        <div class="toolbar">
+          <label for="trendMetric"><strong>Chart metric:</strong></label>
+          <select id="trendMetric">
+            <option value="twh">TWh used</option>
+            <option value="sales">Annual robot sales</option>
+            <option value="stock">Total robot stock</option>
+          </select>
+        </div>
+        <canvas id="trendChart" height="220"></canvas>
+        <div class="summary" id="modelSummary"></div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:14px;">
+      <h2>Pivot Table: Inputs, Retirements, and Electricity Impact</h2>
+      <div class="toolbar">
+        <label for="pivotMode"><strong>Rows:</strong></label>
+        <select id="pivotMode">
+          <option value="year">Year (all selected regions combined)</option>
+          <option value="region">Region (selected year)</option>
+          <option value="year-region">Year × Region</option>
+          <option value="sales">Yearly sales (all selected regions combined)</option>
+        </select>
+
+        <label for="pivotYear"><strong>Selected year:</strong></label>
+        <input id="pivotYear" type="number" min="2025" max="2050" value="2050" step="1" />
+      </div>
+      <p class="small">Stocks/retirements/deployments are in millions of robots. Electricity metrics are in TWh.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Row</th>
+              <th>Industrial Stock</th>
+              <th>Warehouse Stock</th>
+              <th>Humanoid Stock</th>
+              <th>Consumer Stock</th>
+              <th>Total Retirements</th>
+              <th>Total Deployments</th>
+              <th>Direct TWh</th>
+              <th>AI/Cloud TWh</th>
+              <th>Total TWh</th>
+              <th>% of selected grid</th>
+            </tr>
+          </thead>
+          <tbody id="pivotBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:14px;">
+      <h2>Works Cited (for model assumptions)</h2>
+      <p class="small">Per your direction, this excludes citations for 2025/2050 stock inputs from the investment report.</p>
+      <ul class="cite-list">
+        <li><strong>Useful life assumption:</strong> U.S. Internal Revenue Service, Publication 946 (asset depreciation framework used as a useful-life anchor). <a href="https://www.irs.gov/publications/p946" target="_blank" rel="noopener noreferrer">irs.gov/publications/p946</a></li>
+        <li><strong>Industrial robot energy anchor:</strong> ABB IRB 6700 product page/spec resources (industrial robot electrical specification reference point). <a href="https://new.abb.com/products/robotics/industrial-robots/irb-6700" target="_blank" rel="noopener noreferrer">abb.com IRB 6700</a></li>
+        <li><strong>Warehouse robot energy anchor:</strong> Geek+ P800 AMR specification (battery capacity / charging profile reference for warehouse robotics). <a href="https://www.geekplus.com/en/picking/p800" target="_blank" rel="noopener noreferrer">geekplus.com P800</a></li>
+        <li><strong>Humanoid robot energy anchor:</strong> Unitree H1 specification page (battery and runtime reference for humanoid robots). <a href="https://www.unitree.com/h1" target="_blank" rel="noopener noreferrer">unitree.com/h1</a></li>
+        <li><strong>Consumer robot energy anchor:</strong> iRobot Roomba product specs/manuals (battery and runtime reference for consumer robots). <a href="https://www.irobot.com/en_US/roomba-combo-j9plus-robot-vacuum-and-mop/c975020.html" target="_blank" rel="noopener noreferrer">irobot.com Roomba Combo j9+</a></li>
+        <li><strong>Regional baseline electricity:</strong> Ember Global Electricity Review (regional electricity generation/consumption context). <a href="https://ember-climate.org/insights/research/global-electricity-review-2024/" target="_blank" rel="noopener noreferrer">ember-climate.org GER 2024</a></li>
+        <li><strong>AI / cloud multiplier context:</strong> IEA report on electricity use from data centres, AI and crypto. <a href="https://www.iea.org/reports/electricity-2024/data-centres-and-data-transmission-networks" target="_blank" rel="noopener noreferrer">iea.org Electricity 2024</a></li>
+      </ul>
+    </section>
+  </div>
+
+  <script>
+    const START_YEAR = 2025;
+    const END_YEAR = 2050;
+    const N_PERIODS = END_YEAR - START_YEAR;
+    const YEARS = Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i);
+
+    const defaultRegions = {
+      China: {
+        baseIndustrialM: 0.00008, targetIndustrialM: 24.59,
+        baseWarehouseM: 0.00016, targetWarehouseM: 93.44,
+        baseHumanoidM: 0.00004, targetHumanoidM: 127.87,
+        baseConsumerM: 0.00172, targetConsumerM: 354.10,
+        usefulLifeYears: 5,
+        industrialAnnualKwh: 22015.2, warehouseAnnualKwh: 14191.2, humanoidAnnualKwh: 1934.5, consumerAnnualKwh: 420.5,
+        aiMultiplier: 0.62, regionalGridTWh: 9800
+      },
+      Europe: {
+        baseIndustrialM: 0.000003, targetIndustrialM: 3.35,
+        baseWarehouseM: 0.000007, targetWarehouseM: 14.87,
+        baseHumanoidM: 0.000001, targetHumanoidM: 14.87,
+        baseConsumerM: 0.000089, targetConsumerM: 66.91,
+        usefulLifeYears: 6,
+        industrialAnnualKwh: 20790.4, warehouseAnnualKwh: 14476.8, humanoidAnnualKwh: 1825.0, consumerAnnualKwh: 398.6,
+        aiMultiplier: 0.56, regionalGridTWh: 4300
+      },
+      "United States": {
+        baseIndustrialM: 0.000023, targetIndustrialM: 6.57,
+        baseWarehouseM: 0.000059, targetWarehouseM: 29.33,
+        baseHumanoidM: 0.000013, targetHumanoidM: 32.87,
+        baseConsumerM: 0.000705, targetConsumerM: 111.23,
+        usefulLifeYears: 5,
+        industrialAnnualKwh: 21374.4, warehouseAnnualKwh: 15008.8, humanoidAnnualKwh: 1898.0, consumerAnnualKwh: 411.7,
+        aiMultiplier: 0.64, regionalGridTWh: 4700
+      },
+      "Don Area of Concern (DAC)": {
+        baseIndustrialM: 0.00000115, targetIndustrialM: 0.3285,
+        baseWarehouseM: 0.00000177, targetWarehouseM: 0.8799,
+        baseHumanoidM: 0.00000013, targetHumanoidM: 0.3287,
+        baseConsumerM: 0.00000705, targetConsumerM: 1.1123,
+        usefulLifeYears: 5,
+        industrialAnnualKwh: 21374.4, warehouseAnnualKwh: 15008.8, humanoidAnnualKwh: 1898.0, consumerAnnualKwh: 411.7,
+        aiMultiplier: 0.64, regionalGridTWh: 47
+      },
+      ROW: {
+        baseIndustrialM: 0.000003, targetIndustrialM: 9.71,
+        baseWarehouseM: 0.000006, targetWarehouseM: 35.59,
+        baseHumanoidM: 0.000001, targetHumanoidM: 38.82,
+        baseConsumerM: 0.000090, targetConsumerM: 135.88,
+        usefulLifeYears: 5,
+        industrialAnnualKwh: 20381.6, warehouseAnnualKwh: 13782.4, humanoidAnnualKwh: 1752.0, consumerAnnualKwh: 389.8,
+        aiMultiplier: 0.54, regionalGridTWh: 11800
+      }
+    };
+
+    let regions = JSON.parse(JSON.stringify(defaultRegions));
+
+    const schema = [
+      ["baseIndustrialM", "Industrial robots in 2025 (M)", 0.1],
+      ["targetIndustrialM", "Industrial robots in 2050 (M)", 0.1],
+      ["baseWarehouseM", "Warehouse robots in 2025 (M)", 0.1],
+      ["targetWarehouseM", "Warehouse robots in 2050 (M)", 0.1],
+      ["baseHumanoidM", "Humanoid robots in 2025 (M)", 0.1],
+      ["targetHumanoidM", "Humanoid robots in 2050 (M)", 0.1],
+      ["baseConsumerM", "Consumer robots in 2025 (M)", 1],
+      ["targetConsumerM", "Consumer robots in 2050 (M)", 1],
+      ["usefulLifeYears", "Useful life (years, e.g., 3-6)", 1],
+      ["industrialAnnualKwh", "Industrial kWh per robot per year", 1],
+      ["warehouseAnnualKwh", "Warehouse kWh per robot per year", 1],
+      ["humanoidAnnualKwh", "Humanoid kWh per robot per year", 1],
+      ["consumerAnnualKwh", "Consumer kWh per robot per year", 1],
+      ["aiMultiplier", "AI/Cloud multiplier", 0.01],
+      ["regionalGridTWh", "Regional baseline electricity (TWh)", 100]
+    ];
+
+    const regionNames = Object.keys(regions);
+    const regionFilters = document.getElementById("regionFilters");
+    const editorRegion = document.getElementById("editorRegion");
+    const inputGrid = document.getElementById("inputGrid");
+    const stockInputGrid = document.getElementById("stockInputGrid");
+    const stockInputs = document.getElementById("stockInputs");
+    const stockAssumptionsBtn = document.getElementById("stockAssumptionsBtn");
+    const kwhInputs = document.getElementById("kwhInputs");
+    const kwhInputGrid = document.getElementById("kwhInputGrid");
+    const kwhAssumptionsBtn = document.getElementById("kwhAssumptionsBtn");
+    const pivotBody = document.getElementById("pivotBody");
+    const pivotMode = document.getElementById("pivotMode");
+    const pivotYear = document.getElementById("pivotYear");
+    const status = document.getElementById("selectionStatus");
+    const adoptionPath = document.getElementById("adoptionPath");
+    const logisticControls = document.getElementById("logisticControls");
+    const logisticSteepness = document.getElementById("logisticSteepness");
+    const logisticSteepnessValue = document.getElementById("logisticSteepnessValue");
+    const modelSummary = document.getElementById("modelSummary");
+    const trendMetric = document.getElementById("trendMetric");
+    let logisticK = 8;
+
+    const stockKeys = new Set([
+      "baseIndustrialM", "targetIndustrialM",
+      "baseWarehouseM", "targetWarehouseM",
+      "baseHumanoidM", "targetHumanoidM",
+      "baseConsumerM", "targetConsumerM"
+    ]);
+    const kwhKeys = new Set(["industrialAnnualKwh", "warehouseAnnualKwh", "humanoidAnnualKwh", "consumerAnnualKwh"]);
+    let showStockAssumptions = false;
+    let showKwhAssumptions = false;
+
+    function fmt(n, d = 2) { return Number(n).toFixed(d); }
+
+    function selectedRegions() {
+      return Array.from(regionFilters.querySelectorAll("input:checked")).map(x => x.dataset.region);
+    }
+
+    function sigmoid(x) {
+      return 1 / (1 + Math.exp(-x));
+    }
+
+
+    function annualKWh(params, type) {
+      const directInput = params[`${type}AnnualKwh`];
+      if (Number.isFinite(directInput) && directInput >= 0) return directInput;
+      const hours = params[`${type}HoursPerDay`] ?? 0;
+      const kw = params[`${type}Kw`] ?? 0;
+      return Math.max(0, hours * kw * 365);
+    }
+
+    function stockAt(base, target, t, pathType) {
+      const x = t / N_PERIODS;
+      if (pathType === "linear") {
+        return base + (target - base) * x;
+      }
+
+      if (pathType === "logistic") {
+        const steepness = logisticK;
+        const lo = sigmoid(-steepness / 2);
+        const hi = sigmoid(steepness / 2);
+        const normalized = (sigmoid(steepness * (x - 0.5)) - lo) / (hi - lo);
+        return base + (target - base) * normalized;
+      }
+
+      if (base <= 0 || target <= 0) {
+        return base + (target - base) * x;
+      }
+      return base * (target / base) ** x;
+    }
+
+    function projectSeries(params, pathType = adoptionPath.value) {
+      const life = Math.max(1, Math.round(params.usefulLifeYears || 1));
+      const annualSeries = [];
+
+      YEARS.forEach((year, t) => {
+        const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
+        const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
+        const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
+        const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
+
+        const prev = annualSeries[t - 1] || { industrialM, warehouseM, humanoidM, consumerM };
+        const retired = annualSeries[t - life] || { deployIndustrialM: 0, deployWarehouseM: 0, deployHumanoidM: 0, deployConsumerM: 0 };
+
+        const retiredIndustrialM = retired.deployIndustrialM;
+        const retiredWarehouseM = retired.deployWarehouseM;
+        const retiredHumanoidM = retired.deployHumanoidM;
+        const retiredConsumerM = retired.deployConsumerM;
+
+        const deployIndustrialM = Math.max(0, industrialM - prev.industrialM + retiredIndustrialM);
+        const deployWarehouseM = Math.max(0, warehouseM - prev.warehouseM + retiredWarehouseM);
+        const deployHumanoidM = Math.max(0, humanoidM - prev.humanoidM + retiredHumanoidM);
+        const deployConsumerM = Math.max(0, consumerM - prev.consumerM + retiredConsumerM);
+
+        const retirementM = retiredIndustrialM + retiredWarehouseM + retiredHumanoidM + retiredConsumerM;
+        const deploymentM = deployIndustrialM + deployWarehouseM + deployHumanoidM + deployConsumerM;
+
+        const directKWh =
+          industrialM * 1e6 * annualKWh(params, "industrial") +
+          warehouseM * 1e6 * annualKWh(params, "warehouse") +
+          humanoidM * 1e6 * annualKWh(params, "humanoid") +
+          consumerM * 1e6 * annualKWh(params, "consumer");
+
+        const directTWh = directKWh / 1e9;
+        const aiTWh = directTWh * params.aiMultiplier;
+        const totalTWh = directTWh + aiTWh;
+
+        annualSeries[t] = {
+          year,
+          industrialM, warehouseM, humanoidM, consumerM,
+          deployIndustrialM, deployWarehouseM, deployHumanoidM, deployConsumerM,
+          retirementM, deploymentM,
+          directTWh, aiTWh, totalTWh,
+          gridTWh: params.regionalGridTWh
+        };
+      });
+
+      return annualSeries;
+    }
+
+    function project(params, year) {
+      return projectSeries(params)[year - START_YEAR];
+    }
+
+    function excelFormulaFor2035(base, target, mode, steepness = logisticK) {
+      const t = 2035 - START_YEAR;
+
+      if (mode === "linear") {
+        return `=${base}+(${target}-${base})*(${t}/${N_PERIODS})`;
+      }
+
+      if (mode === "logistic") {
+        const loExpr = `(1/(1+EXP(${steepness / 2})))`;
+        const hiExpr = `(1/(1+EXP(${-steepness / 2})))`;
+        return `=${base}+(${target}-${base})*((1/(1+EXP(-${steepness}*((${t}/${N_PERIODS})-0.5)))-${loExpr})/(${hiExpr}-${loExpr}))`;
+      }
+
+      return `=${base}*(${target}/${base})^(${t}/${N_PERIODS})`;
+    }
+
+    function updateModelSummary() {
+      const mode = adoptionPath.value;
+      const regionName = editorRegion.value;
+      const regionParams = regions[regionName];
+      const year = 2035;
+      const t = year - START_YEAR;
+      const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments<sub>t</sub> = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + deployments<sub>t-usefulLife</sub>), so retirements are the cohort sold usefulLife years earlier.</li>`;
+
+      const byMode = {
+        exponential: {
+          title: "Exponential path (constant CAGR)",
+          body: "Stocks compound each year at a constant percentage rate that exactly links 2025 to 2050 levels.",
+          eq: "stock<sub>t</sub> = base × (target / base)<sup>t / N</sup>"
+        },
+        linear: {
+          title: "Linear path",
+          body: "Stocks add the same absolute amount each year, creating a straight-line adoption ramp from 2025 to 2050.",
+          eq: "stock<sub>t</sub> = base + (target - base) × (t / N)"
+        },
+        logistic: {
+          title: "Logistic S-curve path",
+          body: "Adoption starts slower, accelerates in the middle years, then tapers as it approaches 2050 targets.",
+          eq: "stock<sub>t</sub> = base + (target - base) × normalized(1 / (1 + e<sup>-k(x-0.5)</sup>), x=t/N)"
+        }
+      };
+
+      const stockTypes = [
+        ["Industrial", "baseIndustrialM", "targetIndustrialM"],
+        ["Warehouse", "baseWarehouseM", "targetWarehouseM"],
+        ["Humanoid", "baseHumanoidM", "targetHumanoidM"],
+        ["Consumer", "baseConsumerM", "targetConsumerM"]
+      ];
+
+      const formulaChecks = stockTypes.map(([label, baseKey, targetKey]) => {
+        const base = regionParams[baseKey];
+        const target = regionParams[targetKey];
+        const excelFormula = excelFormulaFor2035(base, target, mode, logisticK);
+        const result = stockAt(base, target, t, mode);
+        return `<li><strong>${label} 2035 stock check (M robots):</strong> <code>${excelFormula}</code> → ${fmt(result, 6)}</li>`;
+      }).join("");
+
+      const content = byMode[mode];
+      modelSummary.innerHTML = `
+        <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
+        <ul>
+          <li><strong>General adoption equation:</strong> ${content.eq}</li>
+          <li><strong>Excel-ready 2035 check for ${regionName}:</strong> year=${year}, t=${t}, N=${N_PERIODS}${mode === "logistic" ? `, k=${logisticK}, lo=1/(1+EXP(${fmt(logisticK / 2, 2)})), hi=1/(1+EXP(${fmt(-logisticK / 2, 2)}))` : ""}. Copy any formula below directly into Excel to reproduce the exact model stock.</li>
+          ${formulaChecks}
+          ${common}
+        </ul>
+      `;
+    }
+
+    function updateLogisticControls() {
+      const isLogistic = adoptionPath.value === "logistic";
+      logisticControls.classList.toggle("active", isLogistic);
+      logisticSteepnessValue.textContent = String(logisticK);
+      logisticSteepness.setAttribute("aria-hidden", String(!isLogistic));
+    }
+
+    function aggregate(year, picks) {
+      const a = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
+      picks.forEach(name => {
+        const p = project(regions[name], year);
+        a.industrialM += p.industrialM;
+        a.warehouseM += p.warehouseM;
+        a.humanoidM += p.humanoidM;
+        a.consumerM += p.consumerM;
+        a.retirementM += p.retirementM;
+        a.deploymentM += p.deploymentM;
+        a.directTWh += p.directTWh;
+        a.aiTWh += p.aiTWh;
+        a.totalTWh += p.totalTWh;
+        a.gridTWh += p.gridTWh;
+      });
+      a.sharePct = a.gridTWh ? (a.totalTWh / a.gridTWh) * 100 : 0;
+      return a;
+    }
+    function buildControls() {
+      regionNames.forEach((name, i) => {
+        const id = `reg_${i}`;
+        regionFilters.insertAdjacentHTML("beforeend", `<label><input id="${id}" type="checkbox" data-region="${name}" checked> ${name}</label>`);
+        editorRegion.insertAdjacentHTML("beforeend", `<option value="${name}">${name}</option>`);
+      });
+      regionFilters.querySelectorAll("input").forEach(c => c.addEventListener("change", updateAll));
+      editorRegion.addEventListener("change", () => {
+        renderInputs();
+        updateModelSummary();
+      });
+
+      document.getElementById("selectAllBtn").addEventListener("click", () => {
+        regionFilters.querySelectorAll("input").forEach(c => c.checked = true);
+        updateAll();
+      });
+      document.getElementById("clearAllBtn").addEventListener("click", () => {
+        regionFilters.querySelectorAll("input").forEach(c => c.checked = false);
+        updateAll();
+      });
+      document.getElementById("resetDefaultsBtn").addEventListener("click", () => {
+        regions = JSON.parse(JSON.stringify(defaultRegions));
+        logisticK = 8;
+        logisticSteepness.value = String(logisticK);
+        updateLogisticControls();
+        renderInputs();
+        updateAll();
+      });
+
+      pivotMode.addEventListener("change", updateAll);
+      pivotYear.addEventListener("input", updateAll);
+      adoptionPath.addEventListener("change", () => {
+        updateLogisticControls();
+        updateModelSummary();
+        updateAll();
+      });
+      logisticSteepness.addEventListener("input", () => {
+        logisticK = Math.max(1, Math.min(25, Math.round(Number(logisticSteepness.value) || 8)));
+        logisticSteepness.value = String(logisticK);
+        updateLogisticControls();
+        updateModelSummary();
+        updateAll();
+      });
+      trendMetric.addEventListener("change", () => {
+        applyChartMetric();
+        updateAll();
+      });
+      stockAssumptionsBtn.addEventListener("click", () => {
+        showStockAssumptions = !showStockAssumptions;
+        updateStockToggle();
+      });
+      kwhAssumptionsBtn.addEventListener("click", () => {
+        showKwhAssumptions = !showKwhAssumptions;
+        updateKwhToggle();
+      });
+    }
+
+    function updateStockToggle() {
+      stockInputs.classList.toggle("open", showStockAssumptions);
+      stockAssumptionsBtn.setAttribute("aria-expanded", String(showStockAssumptions));
+      stockAssumptionsBtn.textContent = showStockAssumptions ? "Stock Assumptions ▲" : "Stock Assumptions ▼";
+    }
+
+    function updateKwhToggle() {
+      kwhInputs.classList.toggle("open", showKwhAssumptions);
+      kwhAssumptionsBtn.setAttribute("aria-expanded", String(showKwhAssumptions));
+      kwhAssumptionsBtn.textContent = showKwhAssumptions ? "kWh Assumptions ▲" : "kWh Assumptions ▼";
+    }
+
+    function renderInputs() {
+      const r = regions[editorRegion.value];
+      inputGrid.innerHTML = "";
+      stockInputGrid.innerHTML = "";
+      kwhInputGrid.innerHTML = "";
+      schema.forEach(([key, label, step]) => {
+        const value = key === "aiMultiplier" ? fmt(r[key], 3) : r[key];
+        const fieldHtml = `
+          <div class="field">
+            <label for="${key}">${label}</label>
+            <input type="number" id="${key}" step="${step}" value="${value}" ${key === "usefulLifeYears" ? "min=\"3\"" : "min=\"0\""} />
+          </div>
+        `;
+        if (stockKeys.has(key)) {
+          stockInputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        } else if (kwhKeys.has(key)) {
+          kwhInputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        } else {
+          inputGrid.insertAdjacentHTML("beforeend", fieldHtml);
+        }
+      });
+      document.querySelectorAll("#stockInputGrid input, #kwhInputGrid input, #inputGrid input").forEach(input => {
+        input.addEventListener("input", () => {
+          const key = input.id;
+          let v = Number(input.value);
+          if (!Number.isFinite(v)) v = 0;
+          if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
+          regions[editorRegion.value][key] = v;
+          updateModelSummary();
+          updateAll();
+        });
+      });
+      updateStockToggle();
+      updateKwhToggle();
+    }
+
+    const chartConfigs = {
+      twh: {
+        yTitle: "TWh",
+        datasets: [
+          { label: "Direct TWh", borderColor: "#1d4ed8", backgroundColor: "#1d4ed820" },
+          { label: "AI/Cloud TWh", borderColor: "#0ea5e9", backgroundColor: "#0ea5e920" },
+          { label: "Total TWh", borderColor: "#0f766e", backgroundColor: "#0f766e20" }
+        ]
+      },
+      sales: {
+        yTitle: "Annual robot sales (M)",
+        datasets: [
+          { label: "Annual robot sales (M)", borderColor: "#7c3aed", backgroundColor: "#7c3aed20" }
+        ]
+      },
+      stock: {
+        yTitle: "Total robot stock (M)",
+        datasets: [
+          { label: "Total robot stock (M)", borderColor: "#ea580c", backgroundColor: "#ea580c20" }
+        ]
+      }
+    };
+
+    function applyChartMetric() {
+      const config = chartConfigs[trendMetric.value] || chartConfigs.twh;
+      chart.data.datasets = config.datasets.map(ds => ({ ...ds, data: [], tension: 0.2 }));
+      chart.options.scales.y.title.text = config.yTitle;
+    }
+
+    const chart = new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: YEARS,
+        datasets: []
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "bottom" } },
+        scales: { y: { title: { display: true, text: "TWh" } }, x: { title: { display: true, text: "Year" } } }
+      }
+    });
+    applyChartMetric();
+
+    function rowHtml(label, d, total = false) {
+      return `
+        <tr class="${total ? "total-row" : ""}">
+          <td class="left">${label}</td>
+          <td>${fmt(d.industrialM)}</td>
+          <td>${fmt(d.warehouseM)}</td>
+          <td>${fmt(d.humanoidM)}</td>
+          <td>${fmt(d.consumerM)}</td>
+          <td>${fmt(d.retirementM, 2)}</td>
+          <td>${fmt(d.deploymentM, 2)}</td>
+          <td>${fmt(d.directTWh, 1)}</td>
+          <td>${fmt(d.aiTWh, 1)}</td>
+          <td>${fmt(d.totalTWh, 1)}</td>
+          <td>${fmt(d.sharePct, 2)}%</td>
+        </tr>
+      `;
+    }
+
+    function renderPivot(picks) {
+      pivotBody.innerHTML = "";
+      const mode = pivotMode.value;
+      const y = Math.max(START_YEAR, Math.min(END_YEAR, Number(pivotYear.value) || END_YEAR));
+      pivotYear.value = y;
+
+      if (!picks.length) {
+        pivotBody.innerHTML = `<tr><td class="left">No region selected</td><td colspan="10" style="text-align:left;">Select at least one region to populate the pivot table.</td></tr>`;
+        return;
+      }
+
+      if (mode === "year" || mode === "sales") {
+        YEARS.forEach(year => {
+          const totals = aggregate(year, picks);
+          const label = mode === "sales" ? `Year ${year} Sales` : String(year);
+          pivotBody.insertAdjacentHTML("beforeend", rowHtml(label, totals));
+        });
+      } else if (mode === "region") {
+        const total = { industrialM: 0, warehouseM: 0, humanoidM: 0, consumerM: 0, retirementM: 0, deploymentM: 0, directTWh: 0, aiTWh: 0, totalTWh: 0, gridTWh: 0 };
+        picks.forEach(name => {
+          const p = project(regions[name], y);
+          p.sharePct = p.gridTWh ? (p.totalTWh / p.gridTWh) * 100 : 0;
+          pivotBody.insertAdjacentHTML("beforeend", rowHtml(name, p));
+          total.industrialM += p.industrialM;
+          total.warehouseM += p.warehouseM;
+          total.humanoidM += p.humanoidM;
+          total.consumerM += p.consumerM;
+          total.retirementM += p.retirementM;
+          total.deploymentM += p.deploymentM;
+          total.directTWh += p.directTWh;
+          total.aiTWh += p.aiTWh;
+          total.totalTWh += p.totalTWh;
+          total.gridTWh += p.gridTWh;
+        });
+        total.sharePct = total.gridTWh ? (total.totalTWh / total.gridTWh) * 100 : 0;
+        pivotBody.insertAdjacentHTML("beforeend", rowHtml(`Total (${y})`, total, true));
+      } else {
+        YEARS.forEach(year => {
+          picks.forEach(name => {
+            const p = project(regions[name], year);
+            p.sharePct = p.gridTWh ? (p.totalTWh / p.gridTWh) * 100 : 0;
+            pivotBody.insertAdjacentHTML("beforeend", rowHtml(`${year} | ${name}`, p));
+          });
+          pivotBody.insertAdjacentHTML("beforeend", rowHtml(`${year} | Total`, aggregate(year, picks), true));
+        });
+      }
+    }
+
+    function updateAll() {
+      const picks = selectedRegions();
+      status.textContent = picks.length ? `Selected regions: ${picks.join(", ")}` : "No region selected. Chart and table are paused until one or more regions are selected.";
+
+      if (!picks.length) {
+        chart.data.datasets.forEach(ds => ds.data = YEARS.map(() => null));
+        chart.update();
+        renderPivot(picks);
+        ["kpiDirect", "kpiAI", "kpiTotal", "kpiShare"].forEach(id => document.getElementById(id).textContent = "-");
+        return;
+      }
+
+      const series = YEARS.map(y => aggregate(y, picks));
+      if (trendMetric.value === "sales") {
+        chart.data.datasets[0].data = series.map(s => Number(s.deploymentM.toFixed(2)));
+      } else if (trendMetric.value === "stock") {
+        chart.data.datasets[0].data = series.map(s => Number((s.industrialM + s.warehouseM + s.humanoidM + s.consumerM).toFixed(2)));
+      } else {
+        chart.data.datasets[0].data = series.map(s => Number(s.directTWh.toFixed(1)));
+        chart.data.datasets[1].data = series.map(s => Number(s.aiTWh.toFixed(1)));
+        chart.data.datasets[2].data = series.map(s => Number(s.totalTWh.toFixed(1)));
+      }
+      chart.update();
+
+      const y2050 = series[series.length - 1];
+      document.getElementById("kpiDirect").textContent = fmt(y2050.directTWh, 1);
+      document.getElementById("kpiAI").textContent = fmt(y2050.aiTWh, 1);
+      document.getElementById("kpiTotal").textContent = fmt(y2050.totalTWh, 1);
+      document.getElementById("kpiShare").textContent = `${fmt(y2050.sharePct, 2)}%`;
+
+      renderPivot(picks);
+    }
+
+    buildControls();
+    updateLogisticControls();
+    renderInputs();
+    updateModelSummary();
+    updateAll();
+  </script>
+</body>
+</html>
