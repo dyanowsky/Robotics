@@ -368,8 +368,29 @@
       };
     }
 
+    function excelFormulaFor2035(base, target, mode) {
+      const t = 2035 - START_YEAR;
+
+      if (mode === "linear") {
+        return `=${base}+(${target}-${base})*(${t}/${N_PERIODS})`;
+      }
+
+      if (mode === "logistic") {
+        const steepness = 8;
+        const loExpr = `(1/(1+EXP(${steepness / 2})))`;
+        const hiExpr = `(1/(1+EXP(${-steepness / 2})))`;
+        return `=${base}+(${target}-${base})*((1/(1+EXP(-${steepness}*((${t}/${N_PERIODS})-0.5)))-${loExpr})/(${hiExpr}-${loExpr}))`;
+      }
+
+      return `=${base}*(${target}/${base})^(${t}/${N_PERIODS})`;
+    }
+
     function updateModelSummary() {
       const mode = adoptionPath.value;
+      const regionName = editorRegion.value;
+      const regionParams = regions[regionName];
+      const year = 2035;
+      const t = year - START_YEAR;
       const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li>`;
 
       const byMode = {
@@ -390,11 +411,28 @@
         }
       };
 
+      const stockTypes = [
+        ["Industrial", "baseIndustrialM", "targetIndustrialM"],
+        ["Warehouse", "baseWarehouseM", "targetWarehouseM"],
+        ["Humanoid", "baseHumanoidM", "targetHumanoidM"],
+        ["Consumer", "baseConsumerM", "targetConsumerM"]
+      ];
+
+      const formulaChecks = stockTypes.map(([label, baseKey, targetKey]) => {
+        const base = regionParams[baseKey];
+        const target = regionParams[targetKey];
+        const excelFormula = excelFormulaFor2035(base, target, mode);
+        const result = stockAt(base, target, t, mode);
+        return `<li><strong>${label} 2035 stock check (M robots):</strong> <code>${excelFormula}</code> → ${fmt(result, 6)}</li>`;
+      }).join("");
+
       const content = byMode[mode];
       modelSummary.innerHTML = `
         <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
         <ul>
-          <li><strong>Adoption equation:</strong> ${content.eq}</li>
+          <li><strong>General adoption equation:</strong> ${content.eq}</li>
+          <li><strong>Excel-ready 2035 check for ${regionName}:</strong> year=${year}, t=${t}, N=${N_PERIODS}${mode === "logistic" ? ", k=8, lo=1/(1+EXP(4)), hi=1/(1+EXP(-4))" : ""}. Copy any formula below directly into Excel to reproduce the exact model stock.</li>
+          ${formulaChecks}
           ${common}
         </ul>
       `;
@@ -427,6 +465,7 @@
       regionFilters.querySelectorAll("input").forEach(c => c.addEventListener("change", updateAll));
       editorRegion.addEventListener("change", () => {
         renderInputs();
+        updateModelSummary();
       });
 
       document.getElementById("selectAllBtn").addEventListener("click", () => {
@@ -503,6 +542,7 @@
           if (!Number.isFinite(v)) v = 0;
           if (key === "usefulLifeYears") v = Math.max(3, Math.round(v));
           regions[editorRegion.value][key] = v;
+          updateModelSummary();
           updateAll();
         });
       });
