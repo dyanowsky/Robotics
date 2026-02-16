@@ -224,6 +224,15 @@
         industrialAnnualKwh: 21374.4, warehouseAnnualKwh: 15008.8, humanoidAnnualKwh: 1898.0, consumerAnnualKwh: 411.7,
         aiMultiplier: 0.64, regionalGridTWh: 4700
       },
+      "Don Area of Concern (DAC)": {
+        baseIndustrialM: 0.00000115, targetIndustrialM: 0.3285,
+        baseWarehouseM: 0.00000177, targetWarehouseM: 0.8799,
+        baseHumanoidM: 0.00000013, targetHumanoidM: 0.3287,
+        baseConsumerM: 0.00000705, targetConsumerM: 1.1123,
+        usefulLifeYears: 5,
+        industrialAnnualKwh: 21374.4, warehouseAnnualKwh: 15008.8, humanoidAnnualKwh: 1898.0, consumerAnnualKwh: 411.7,
+        aiMultiplier: 0.64, regionalGridTWh: 47
+      },
       ROW: {
         baseIndustrialM: 0.000003, targetIndustrialM: 9.71,
         baseWarehouseM: 0.000006, targetWarehouseM: 35.59,
