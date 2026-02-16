@@ -72,7 +72,7 @@
 <body>
   <div class="container">
     <h1>Robotics Adoption → Electricity Demand (2025–2050)</h1>
-    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Add useful life and per-robot annual kWh to control electricity assumptions directly.</p>
+    <p class="subtitle">Inputs now use <strong>2025 and 2050 stock levels</strong>; growth rates are derived outputs. Useful life now feeds replacement retirements directly, so shorter life visibly increases annual sales needed to maintain target stock.</p>
 
     <div class="layout">
       <section class="card">
@@ -331,50 +331,57 @@
       return base * (target / base) ** x;
     }
 
-    function project(params, year) {
-      const t = year - START_YEAR;
-      const pathType = adoptionPath.value;
-      const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
-      const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
-      const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
-      const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
-
-      const prevIndustrialM = t === 0 ? industrialM : stockAt(params.baseIndustrialM, params.targetIndustrialM, t - 1, pathType);
-      const prevWarehouseM = t === 0 ? warehouseM : stockAt(params.baseWarehouseM, params.targetWarehouseM, t - 1, pathType);
-      const prevHumanoidM = t === 0 ? humanoidM : stockAt(params.baseHumanoidM, params.targetHumanoidM, t - 1, pathType);
-      const prevConsumerM = t === 0 ? consumerM : stockAt(params.baseConsumerM, params.targetConsumerM, t - 1, pathType);
-
+    function projectSeries(params, pathType = adoptionPath.value) {
       const life = Math.max(1, Math.round(params.usefulLifeYears || 1));
-      const retireT = t - life;
-      const retiredIndustrialM = retireT >= 0 ? stockAt(params.baseIndustrialM, params.targetIndustrialM, retireT, pathType) : 0;
-      const retiredWarehouseM = retireT >= 0 ? stockAt(params.baseWarehouseM, params.targetWarehouseM, retireT, pathType) : 0;
-      const retiredHumanoidM = retireT >= 0 ? stockAt(params.baseHumanoidM, params.targetHumanoidM, retireT, pathType) : 0;
-      const retiredConsumerM = retireT >= 0 ? stockAt(params.baseConsumerM, params.targetConsumerM, retireT, pathType) : 0;
+      const annualSeries = [];
 
-      const deployIndustrialM = Math.max(0, industrialM - prevIndustrialM + retiredIndustrialM);
-      const deployWarehouseM = Math.max(0, warehouseM - prevWarehouseM + retiredWarehouseM);
-      const deployHumanoidM = Math.max(0, humanoidM - prevHumanoidM + retiredHumanoidM);
-      const deployConsumerM = Math.max(0, consumerM - prevConsumerM + retiredConsumerM);
+      YEARS.forEach((year, t) => {
+        const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
+        const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
+        const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
+        const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
 
-      const retirementM = retiredIndustrialM + retiredWarehouseM + retiredHumanoidM + retiredConsumerM;
-      const deploymentM = deployIndustrialM + deployWarehouseM + deployHumanoidM + deployConsumerM;
+        const prev = annualSeries[t - 1] || { industrialM, warehouseM, humanoidM, consumerM };
+        const retired = annualSeries[t - life] || { deployIndustrialM: 0, deployWarehouseM: 0, deployHumanoidM: 0, deployConsumerM: 0 };
 
-      const directKWh =
-        industrialM * 1e6 * annualKWh(params, "industrial") +
-        warehouseM * 1e6 * annualKWh(params, "warehouse") +
-        humanoidM * 1e6 * annualKWh(params, "humanoid") +
-        consumerM * 1e6 * annualKWh(params, "consumer");
+        const retiredIndustrialM = retired.deployIndustrialM;
+        const retiredWarehouseM = retired.deployWarehouseM;
+        const retiredHumanoidM = retired.deployHumanoidM;
+        const retiredConsumerM = retired.deployConsumerM;
 
-      const directTWh = directKWh / 1e9;
-      const aiTWh = directTWh * params.aiMultiplier;
-      const totalTWh = directTWh + aiTWh;
+        const deployIndustrialM = Math.max(0, industrialM - prev.industrialM + retiredIndustrialM);
+        const deployWarehouseM = Math.max(0, warehouseM - prev.warehouseM + retiredWarehouseM);
+        const deployHumanoidM = Math.max(0, humanoidM - prev.humanoidM + retiredHumanoidM);
+        const deployConsumerM = Math.max(0, consumerM - prev.consumerM + retiredConsumerM);
 
-      return {
-        industrialM, warehouseM, humanoidM, consumerM,
-        retirementM, deploymentM,
-        directTWh, aiTWh, totalTWh,
-        gridTWh: params.regionalGridTWh
-      };
+        const retirementM = retiredIndustrialM + retiredWarehouseM + retiredHumanoidM + retiredConsumerM;
+        const deploymentM = deployIndustrialM + deployWarehouseM + deployHumanoidM + deployConsumerM;
+
+        const directKWh =
+          industrialM * 1e6 * annualKWh(params, "industrial") +
+          warehouseM * 1e6 * annualKWh(params, "warehouse") +
+          humanoidM * 1e6 * annualKWh(params, "humanoid") +
+          consumerM * 1e6 * annualKWh(params, "consumer");
+
+        const directTWh = directKWh / 1e9;
+        const aiTWh = directTWh * params.aiMultiplier;
+        const totalTWh = directTWh + aiTWh;
+
+        annualSeries[t] = {
+          year,
+          industrialM, warehouseM, humanoidM, consumerM,
+          deployIndustrialM, deployWarehouseM, deployHumanoidM, deployConsumerM,
+          retirementM, deploymentM,
+          directTWh, aiTWh, totalTWh,
+          gridTWh: params.regionalGridTWh
+        };
+      });
+
+      return annualSeries;
+    }
+
+    function project(params, year) {
+      return projectSeries(params)[year - START_YEAR];
     }
 
     function excelFormulaFor2035(base, target, mode) {
@@ -400,7 +407,7 @@
       const regionParams = regions[regionName];
       const year = 2035;
       const t = year - START_YEAR;
-      const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + retirements<sub>t</sub>), with retirements delayed by useful life.</li>`;
+      const common = `<li><strong>Electricity:</strong> directTWh = (Σ stock<sub>type</sub> × 10<sup>6</sup> × kWh<sub>type</sub>) / 10<sup>9</sup>; aiTWh = directTWh × aiMultiplier; totalTWh = directTWh + aiTWh.</li><li><strong>Replacement logic:</strong> deployments<sub>t</sub> = max(0, stock<sub>t</sub> - stock<sub>t-1</sub> + deployments<sub>t-usefulLife</sub>), so retirements are the cohort sold usefulLife years earlier.</li>`;
 
       const byMode = {
         exponential: {
