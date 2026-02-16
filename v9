@@ -331,41 +331,33 @@
       return base * (target / base) ** x;
     }
 
-    function categoryFlowAt(base, target, t, pathType, lifeYears) {
-      const stockSeries = [];
-      const deploymentSeries = [];
-      for (let i = 0; i <= t; i += 1) {
-        const stock = stockAt(base, target, i, pathType);
-        const prevStock = i === 0 ? stock : stockSeries[i - 1];
-        const retirement = i >= lifeYears ? deploymentSeries[i - lifeYears] : 0;
-        const deployment = Math.max(0, stock - prevStock + retirement);
-        stockSeries.push(stock);
-        deploymentSeries.push(deployment);
-      }
-      return {
-        stockM: stockSeries[t],
-        retirementM: t >= lifeYears ? deploymentSeries[t - lifeYears] : 0,
-        deploymentM: deploymentSeries[t]
-      };
-    }
-
     function project(params, year) {
       const t = year - START_YEAR;
       const pathType = adoptionPath.value;
-      const lifeYears = Math.max(1, Math.round(params.usefulLifeYears || 1));
+      const industrialM = stockAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType);
+      const warehouseM = stockAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType);
+      const humanoidM = stockAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType);
+      const consumerM = stockAt(params.baseConsumerM, params.targetConsumerM, t, pathType);
 
-      const industrial = categoryFlowAt(params.baseIndustrialM, params.targetIndustrialM, t, pathType, lifeYears);
-      const warehouse = categoryFlowAt(params.baseWarehouseM, params.targetWarehouseM, t, pathType, lifeYears);
-      const humanoid = categoryFlowAt(params.baseHumanoidM, params.targetHumanoidM, t, pathType, lifeYears);
-      const consumer = categoryFlowAt(params.baseConsumerM, params.targetConsumerM, t, pathType, lifeYears);
+      const prevIndustrialM = t === 0 ? industrialM : stockAt(params.baseIndustrialM, params.targetIndustrialM, t - 1, pathType);
+      const prevWarehouseM = t === 0 ? warehouseM : stockAt(params.baseWarehouseM, params.targetWarehouseM, t - 1, pathType);
+      const prevHumanoidM = t === 0 ? humanoidM : stockAt(params.baseHumanoidM, params.targetHumanoidM, t - 1, pathType);
+      const prevConsumerM = t === 0 ? consumerM : stockAt(params.baseConsumerM, params.targetConsumerM, t - 1, pathType);
 
-      const industrialM = industrial.stockM;
-      const warehouseM = warehouse.stockM;
-      const humanoidM = humanoid.stockM;
-      const consumerM = consumer.stockM;
+      const life = Math.max(1, Math.round(params.usefulLifeYears || 1));
+      const retireT = t - life;
+      const retiredIndustrialM = retireT >= 0 ? stockAt(params.baseIndustrialM, params.targetIndustrialM, retireT, pathType) : 0;
+      const retiredWarehouseM = retireT >= 0 ? stockAt(params.baseWarehouseM, params.targetWarehouseM, retireT, pathType) : 0;
+      const retiredHumanoidM = retireT >= 0 ? stockAt(params.baseHumanoidM, params.targetHumanoidM, retireT, pathType) : 0;
+      const retiredConsumerM = retireT >= 0 ? stockAt(params.baseConsumerM, params.targetConsumerM, retireT, pathType) : 0;
 
-      const retirementM = industrial.retirementM + warehouse.retirementM + humanoid.retirementM + consumer.retirementM;
-      const deploymentM = industrial.deploymentM + warehouse.deploymentM + humanoid.deploymentM + consumer.deploymentM;
+      const deployIndustrialM = Math.max(0, industrialM - prevIndustrialM + retiredIndustrialM);
+      const deployWarehouseM = Math.max(0, warehouseM - prevWarehouseM + retiredWarehouseM);
+      const deployHumanoidM = Math.max(0, humanoidM - prevHumanoidM + retiredHumanoidM);
+      const deployConsumerM = Math.max(0, consumerM - prevConsumerM + retiredConsumerM);
+
+      const retirementM = retiredIndustrialM + retiredWarehouseM + retiredHumanoidM + retiredConsumerM;
+      const deploymentM = deployIndustrialM + deployWarehouseM + deployHumanoidM + deployConsumerM;
 
       const directKWh =
         industrialM * 1e6 * annualKWh(params, "industrial") +
