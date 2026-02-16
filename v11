@@ -27,6 +27,10 @@
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
     .toolbar button, .toolbar select, .toolbar input { border: 1px solid #c9d7f2; border-radius: 8px; padding: 7px 9px; background: white; }
     .toolbar button { cursor: pointer; }
+    .logistic-controls { display: none; align-items: center; gap: 8px; margin-bottom: 10px; color: #334155; font-weight: 600; }
+    .logistic-controls.active { display: flex; }
+    .logistic-controls input[type="range"] { flex: 1; }
+    .logistic-controls .value { min-width: 24px; text-align: right; color: #1e40af; }
     .region-grid { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px; }
     .region-grid label { font-weight: 600; }
 
@@ -93,6 +97,12 @@
             <option value="linear">Linear</option>
             <option value="logistic">Logistic S-curve</option>
           </select>
+        </div>
+
+        <div id="logisticControls" class="logistic-controls" aria-live="polite">
+          <label for="logisticSteepness">Logistic steepness (k):</label>
+          <input id="logisticSteepness" type="range" min="1" max="25" step="1" value="8" />
+          <span id="logisticSteepnessValue" class="value">8</span>
         </div>
 
         <div class="section-toggle">
@@ -279,8 +289,12 @@
     const pivotYear = document.getElementById("pivotYear");
     const status = document.getElementById("selectionStatus");
     const adoptionPath = document.getElementById("adoptionPath");
+    const logisticControls = document.getElementById("logisticControls");
+    const logisticSteepness = document.getElementById("logisticSteepness");
+    const logisticSteepnessValue = document.getElementById("logisticSteepnessValue");
     const modelSummary = document.getElementById("modelSummary");
     const trendMetric = document.getElementById("trendMetric");
+    let logisticK = 8;
 
     const stockKeys = new Set([
       "baseIndustrialM", "targetIndustrialM",
@@ -318,7 +332,7 @@
       }
 
       if (pathType === "logistic") {
-        const steepness = 8;
+        const steepness = logisticK;
         const lo = sigmoid(-steepness / 2);
         const hi = sigmoid(steepness / 2);
         const normalized = (sigmoid(steepness * (x - 0.5)) - lo) / (hi - lo);
@@ -384,7 +398,7 @@
       return projectSeries(params)[year - START_YEAR];
     }
 
-    function excelFormulaFor2035(base, target, mode) {
+    function excelFormulaFor2035(base, target, mode, steepness = logisticK) {
       const t = 2035 - START_YEAR;
 
       if (mode === "linear") {
@@ -392,7 +406,6 @@
       }
 
       if (mode === "logistic") {
-        const steepness = 8;
         const loExpr = `(1/(1+EXP(${steepness / 2})))`;
         const hiExpr = `(1/(1+EXP(${-steepness / 2})))`;
         return `=${base}+(${target}-${base})*((1/(1+EXP(-${steepness}*((${t}/${N_PERIODS})-0.5)))-${loExpr})/(${hiExpr}-${loExpr}))`;
@@ -437,7 +450,7 @@
       const formulaChecks = stockTypes.map(([label, baseKey, targetKey]) => {
         const base = regionParams[baseKey];
         const target = regionParams[targetKey];
-        const excelFormula = excelFormulaFor2035(base, target, mode);
+        const excelFormula = excelFormulaFor2035(base, target, mode, logisticK);
         const result = stockAt(base, target, t, mode);
         return `<li><strong>${label} 2035 stock check (M robots):</strong> <code>${excelFormula}</code> → ${fmt(result, 6)}</li>`;
       }).join("");
@@ -447,11 +460,18 @@
         <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
         <ul>
           <li><strong>General adoption equation:</strong> ${content.eq}</li>
-          <li><strong>Excel-ready 2035 check for ${regionName}:</strong> year=${year}, t=${t}, N=${N_PERIODS}${mode === "logistic" ? ", k=8, lo=1/(1+EXP(4)), hi=1/(1+EXP(-4))" : ""}. Copy any formula below directly into Excel to reproduce the exact model stock.</li>
+          <li><strong>Excel-ready 2035 check for ${regionName}:</strong> year=${year}, t=${t}, N=${N_PERIODS}${mode === "logistic" ? `, k=${logisticK}, lo=1/(1+EXP(${fmt(logisticK / 2, 2)})), hi=1/(1+EXP(${fmt(-logisticK / 2, 2)}))` : ""}. Copy any formula below directly into Excel to reproduce the exact model stock.</li>
           ${formulaChecks}
           ${common}
         </ul>
       `;
+    }
+
+    function updateLogisticControls() {
+      const isLogistic = adoptionPath.value === "logistic";
+      logisticControls.classList.toggle("active", isLogistic);
+      logisticSteepnessValue.textContent = String(logisticK);
+      logisticSteepness.setAttribute("aria-hidden", String(!isLogistic));
     }
 
     function aggregate(year, picks) {
@@ -494,6 +514,9 @@
       });
       document.getElementById("resetDefaultsBtn").addEventListener("click", () => {
         regions = JSON.parse(JSON.stringify(defaultRegions));
+        logisticK = 8;
+        logisticSteepness.value = String(logisticK);
+        updateLogisticControls();
         renderInputs();
         updateAll();
       });
@@ -501,6 +524,14 @@
       pivotMode.addEventListener("change", updateAll);
       pivotYear.addEventListener("input", updateAll);
       adoptionPath.addEventListener("change", () => {
+        updateLogisticControls();
+        updateModelSummary();
+        updateAll();
+      });
+      logisticSteepness.addEventListener("input", () => {
+        logisticK = Math.max(1, Math.min(25, Math.round(Number(logisticSteepness.value) || 8)));
+        logisticSteepness.value = String(logisticK);
+        updateLogisticControls();
         updateModelSummary();
         updateAll();
       });
@@ -709,6 +740,7 @@
     }
 
     buildControls();
+    updateLogisticControls();
     renderInputs();
     updateModelSummary();
     updateAll();
