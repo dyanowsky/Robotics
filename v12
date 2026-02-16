@@ -97,6 +97,8 @@
             <option value="linear">Linear</option>
             <option value="logistic">Logistic S-curve</option>
           </select>
+          <label for="breakthroughYear"><strong>Break Through Year:</strong></label>
+          <input id="breakthroughYear" type="number" min="2025" max="2050" value="2035" step="1" />
         </div>
 
         <div id="logisticControls" class="logistic-controls" aria-live="polite">
@@ -294,7 +296,9 @@
     const logisticSteepnessValue = document.getElementById("logisticSteepnessValue");
     const modelSummary = document.getElementById("modelSummary");
     const trendMetric = document.getElementById("trendMetric");
+    const breakthroughYear = document.getElementById("breakthroughYear");
     let logisticK = 8;
+    let breakthroughYearValue = 2035;
 
     const stockKeys = new Set([
       "baseIndustrialM", "targetIndustrialM",
@@ -326,7 +330,12 @@
     }
 
     function stockAt(base, target, t, pathType) {
-      const x = t / N_PERIODS;
+      const rawYear = START_YEAR + t;
+      const breakthroughOffset = Math.max(0, Math.min(N_PERIODS, breakthroughYearValue - START_YEAR));
+      const acceleratedT = rawYear <= breakthroughYearValue
+        ? t
+        : breakthroughOffset + (t - breakthroughOffset) * 1.6;
+      const x = Math.min(1, acceleratedT / N_PERIODS);
       if (pathType === "linear") {
         return base + (target - base) * x;
       }
@@ -460,6 +469,7 @@
         <p><strong>Model summary:</strong> ${content.title}. ${content.body}</p>
         <ul>
           <li><strong>General adoption equation:</strong> ${content.eq}</li>
+          <li><strong>Break Through Year effect:</strong> from ${breakthroughYearValue} onward, each additional year is modeled as 1.6 years of adoption progress (capped at the 2050 target level).</li>
           <li><strong>Excel-ready 2035 check for ${regionName}:</strong> year=${year}, t=${t}, N=${N_PERIODS}${mode === "logistic" ? `, k=${logisticK}, lo=1/(1+EXP(${fmt(logisticK / 2, 2)})), hi=1/(1+EXP(${fmt(-logisticK / 2, 2)}))` : ""}. Copy any formula below directly into Excel to reproduce the exact model stock.</li>
           ${formulaChecks}
           ${common}
@@ -515,9 +525,12 @@
       document.getElementById("resetDefaultsBtn").addEventListener("click", () => {
         regions = JSON.parse(JSON.stringify(defaultRegions));
         logisticK = 8;
+        breakthroughYearValue = 2035;
         logisticSteepness.value = String(logisticK);
+        breakthroughYear.value = String(breakthroughYearValue);
         updateLogisticControls();
         renderInputs();
+        updateModelSummary();
         updateAll();
       });
 
@@ -532,6 +545,12 @@
         logisticK = Math.max(1, Math.min(25, Math.round(Number(logisticSteepness.value) || 8)));
         logisticSteepness.value = String(logisticK);
         updateLogisticControls();
+        updateModelSummary();
+        updateAll();
+      });
+      breakthroughYear.addEventListener("input", () => {
+        breakthroughYearValue = Math.max(START_YEAR, Math.min(END_YEAR, Math.round(Number(breakthroughYear.value) || 2035)));
+        breakthroughYear.value = String(breakthroughYearValue);
         updateModelSummary();
         updateAll();
       });
